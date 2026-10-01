@@ -1,0 +1,443 @@
+<style>
+  /* Hints inherit the text colour, so they stay readable in the dark theme. */
+  .rr-hint { font-size: 0.875em; opacity: 0.75; }
+  .rr-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+  .rr-row .rr-main { flex: 1 1 7rem; min-width: 0; }
+  .rr-row .rr-side { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; }
+  .rr-select { display: inline-block; width: auto; }
+  .rr-off { opacity: 0.55; }
+  .rr-nowrap { white-space: nowrap; }
+  .rr-unsaved { display: none; border: 1px solid #ffa000; border-radius: 0.3rem; padding: 0.5rem 0.75rem; }
+</style>
+
+<div class="card mb-3" id="rr-login">
+  <div class="card-body">
+    <h5 class="card-title mb-3">Roborock account</h5>
+
+    <div id="rr-logged-in" style="display: none">
+      <p class="mb-2">Logged in as <strong id="rr-email-shown"></strong>.</p>
+      <p class="mb-2 rr-hint" id="rr-rooms"></p>
+      <button type="button" class="btn btn-outline-danger btn-sm m-0" id="rr-logout">Log out</button>
+    </div>
+
+    <div id="rr-logged-out" style="display: none">
+      <p class="rr-hint">
+        Use the email of your Roborock app account. Roborock will email you a verification code.
+      </p>
+      <div class="form-group">
+        <label for="rr-email">Email</label>
+        <input type="email" class="form-control" id="rr-email" autocomplete="username" />
+      </div>
+      <button type="button" class="btn btn-primary m-0 mb-3" id="rr-send">Send code</button>
+      <div class="form-group">
+        <label for="rr-code">Verification code</label>
+        <input type="text" class="form-control" id="rr-code" inputmode="numeric" autocomplete="one-time-code" />
+      </div>
+      <button type="button" class="btn btn-primary m-0" id="rr-do-login">Log in</button>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3" id="rr-room-card" style="display: none">
+  <div class="card-body">
+    <h5 class="card-title mb-2">Rooms</h5>
+    <p class="rr-hint mb-2">Every room on the robot's map. Untick a room to remove its fan from Apple Home, and choose how many passes each room gets. "Default" follows the Passes setting below.</p>
+    <p class="rr-hint mb-2" id="rr-room-auto-off" style="display: none">"Create a fan for every room" is turned off below, so no room fans are created.</p>
+    <ul class="list-group mb-0" id="rr-room-list"></ul>
+  </div>
+</div>
+
+<div class="card mb-3" id="rr-programs" style="display: none">
+  <div class="card-body">
+    <h5 class="card-title mb-2">Room combinations</h5>
+    <p class="rr-hint mb-2">Each combination is one more fan in Apple Home that cleans the selected rooms together.</p>
+    <ul class="list-group mb-3" id="rr-prog-list"></ul>
+    <h6 class="mb-2" id="rr-prog-form-title">New combination</h6>
+    <div class="form-group">
+      <label for="rr-prog-name">Fan name</label>
+      <input type="text" class="form-control" id="rr-prog-name" placeholder="e.g. Kitchen and living room" />
+      <p class="rr-hint mt-1 mb-0" id="rr-prog-rename-hint" style="display: none">A different name makes a new fan in Apple Home (its room and automations start over). To only rename it, rename the fan in the Home app.</p>
+    </div>
+    <div id="rr-prog-rooms" class="mb-2"></div>
+    <div class="form-group">
+      <label for="rr-prog-repeat">Passes</label><br />
+      <select class="form-control rr-select" id="rr-prog-repeat"></select>
+    </div>
+    <button type="button" class="btn btn-primary m-0" id="rr-prog-add">Add combination</button>
+    <button type="button" class="btn btn-outline-secondary m-0" id="rr-prog-cancel" style="display: none">Cancel</button>
+  </div>
+</div>
+
+<div class="rr-unsaved mb-3" id="rr-unsaved">
+  <strong>Not saved yet.</strong> Press Save at the bottom, then restart Homebridge to apply.
+</div>
+
+<script>
+  (async () => {
+    const $ = (id) => document.getElementById(id);
+
+    let roomNames = [];
+    let editIndex = null; // index of the combination being edited, or null
+
+    function esc(t) {
+      const d = document.createElement("div");
+      d.textContent = t;
+      return d.innerHTML;
+    }
+
+    const norm = (s) => String(s == null ? "" : s).trim().toLowerCase();
+
+    function clampRepeat(n) {
+      const v = Math.round(Number(n));
+      return Number.isFinite(v) ? Math.min(3, Math.max(1, v)) : 2;
+    }
+
+    function passesText(n) {
+      return n === 1 ? "1 pass" : n + " passes";
+    }
+
+    /** Fill a passes <select>: "" = use the default from the settings below. */
+    function fillPasses(select, defaultRepeat, value) {
+      select.innerHTML = "";
+      const options = [["", "Default (" + defaultRepeat + ")"], ["1", passesText(1)], ["2", passesText(2)], ["3", passesText(3)]];
+      for (const [v, text] of options) {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = text;
+        select.appendChild(o);
+      }
+      select.value = value == null || value === "" ? "" : String(clampRepeat(value));
+    }
+
+    /** Same naming rule as the plugin: the room name is always part of the fan name. */
+    function fanName(block, room) {
+      let template = String(block.nameTemplate || "Clean {room}").trim();
+      if (!/\{room\}/i.test(template)) template = template ? template + " {room}" : "{room}";
+      return template.replace(/\{room\}/gi, room).trim();
+    }
+
+    async function loadConfig() {
+      const cfg = await homebridge.getPluginConfig();
+      const block = cfg[0] || { platform: "RoborockRoomClean", name: "Roborock Room Clean" };
+      cfg[0] = block;
+      return { cfg, block };
+    }
+
+    // Changes are applied one after the other, so quick taps cannot overwrite
+    // each other; the lists are redrawn once the last one is done.
+    let queue = Promise.resolve();
+    let pending = 0;
+    function serial(fn) {
+      pending++;
+      queue = queue
+        .then(fn)
+        .catch((e) => homebridge.toast.error(errorText(e)))
+        .then(async () => {
+          if (--pending === 0) {
+            await renderRooms();
+            await renderPrograms();
+          }
+        });
+      return queue;
+    }
+
+    async function commit(cfg) {
+      await homebridge.updatePluginConfig(cfg);
+      $("rr-unsaved").style.display = "block";
+    }
+
+    // ---------- rooms ----------
+
+    async function setRoomFan(room, on) {
+      const { cfg, block } = await loadConfig();
+      const list = (block.excludeRooms || []).filter((r) => norm(r) && norm(r) !== norm(room));
+      if (!on) list.push(room);
+      // Always send the list, even when empty: the Homebridge UI merges this
+      // block into the stored one, so a key that is left out is never removed.
+      block.excludeRooms = list;
+      await commit(cfg);
+    }
+
+    async function setRoomRepeat(room, value) {
+      const { cfg, block } = await loadConfig();
+      const list = (Array.isArray(block.roomSettings) ? block.roomSettings : []).filter((r) => r && norm(r.room));
+      let entry = list.find((r) => norm(r.room) === norm(room));
+      if (!entry) {
+        entry = { room };
+        list.push(entry);
+      }
+      if (value) entry.repeat = clampRepeat(value);
+      else delete entry.repeat;
+      // Keep only rooms that still differ from the defaults.
+      const kept = list.filter((r) => Object.keys(r).length > 1);
+      block.roomSettings = kept; // sent even when empty, see setRoomFan
+      await commit(cfg);
+    }
+
+    async function renderRooms() {
+      const { block } = await loadConfig();
+      const auto = block.autoRooms !== false;
+      const defaultRepeat = clampRepeat(block.repeat ?? 2);
+      const excluded = new Set((block.excludeRooms || []).map(norm));
+      const settings = new Map();
+      for (const r of Array.isArray(block.roomSettings) ? block.roomSettings : []) {
+        if (r && norm(r.room)) settings.set(norm(r.room), r);
+      }
+      $("rr-room-auto-off").style.display = auto ? "none" : "block";
+      const list = $("rr-room-list");
+      list.innerHTML = "";
+      roomNames.forEach((room, i) => {
+        const on = auto && !excluded.has(norm(room));
+        const own = settings.get(norm(room)) || {};
+        const li = document.createElement("li");
+        li.className = "list-group-item rr-row";
+
+        const main = document.createElement("div");
+        main.className = "form-check rr-main";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.className = "form-check-input";
+        box.id = "rr-fan-" + i;
+        box.checked = on;
+        box.disabled = !auto;
+        box.addEventListener("change", () => {
+          const checked = box.checked;
+          serial(() => setRoomFan(room, checked));
+        });
+        const label = document.createElement("label");
+        label.className = "form-check-label";
+        label.htmlFor = box.id;
+        label.innerHTML = "<strong><bdi>" + esc(room) + "</bdi></strong><br><span class=\"rr-hint\"><bdi>" + esc(on ? fanName(block, room) : "No fan in Apple Home") + "</bdi></span>";
+        if (!on) label.classList.add("rr-off");
+        main.appendChild(box);
+        main.appendChild(label);
+
+        const side = document.createElement("div");
+        side.className = "rr-side";
+        const select = document.createElement("select");
+        select.className = "form-control form-control-sm rr-select";
+        select.id = "rr-passes-" + i;
+        select.setAttribute("aria-label", "Passes for " + room);
+        fillPasses(select, defaultRepeat, own.repeat);
+        select.disabled = !on;
+        select.addEventListener("change", () => {
+          const value = select.value;
+          serial(() => setRoomRepeat(room, value));
+        });
+        side.appendChild(select);
+
+        li.appendChild(main);
+        li.appendChild(side);
+        list.appendChild(li);
+      });
+    }
+
+    // ---------- combinations ----------
+
+    function resetProgramForm(block) {
+      editIndex = null;
+      $("rr-prog-name").value = "";
+      document.querySelectorAll("#rr-prog-rooms input").forEach((c) => (c.checked = false));
+      fillPasses($("rr-prog-repeat"), clampRepeat((block && block.repeat) ?? 2), "");
+      $("rr-prog-form-title").textContent = "New combination";
+      $("rr-prog-add").textContent = "Add combination";
+      $("rr-prog-cancel").style.display = "none";
+      $("rr-prog-rename-hint").style.display = "none";
+    }
+
+    function editProgram(block, i) {
+      const p = (block.programs || [])[i];
+      if (!p) return;
+      editIndex = i;
+      $("rr-prog-name").value = p.name || "";
+      const wanted = new Set((p.rooms || []).map(norm));
+      document.querySelectorAll("#rr-prog-rooms input").forEach((c) => (c.checked = wanted.has(norm(c.value))));
+      fillPasses($("rr-prog-repeat"), clampRepeat(block.repeat ?? 2), p.repeat);
+      $("rr-prog-form-title").textContent = "Edit \"" + (p.name || "") + "\"";
+      $("rr-prog-add").textContent = "Update combination";
+      $("rr-prog-cancel").style.display = "inline-block";
+      $("rr-prog-rename-hint").style.display = "block";
+      $("rr-prog-form-title").scrollIntoView({ block: "nearest" });
+    }
+
+    async function renderPrograms() {
+      const { block } = await loadConfig();
+      const programs = block.programs || [];
+      const defaultRepeat = clampRepeat(block.repeat ?? 2);
+      const list = $("rr-prog-list");
+      list.innerHTML = "";
+      if (!programs.length) {
+        list.innerHTML = '<li class="list-group-item rr-hint">No combinations yet.</li>';
+      }
+      programs.forEach((p, i) => {
+        const li = document.createElement("li");
+        li.className = "list-group-item rr-row";
+        const passes = passesText(clampRepeat(p.repeat ?? defaultRepeat));
+        const main = document.createElement("span");
+        main.className = "rr-main";
+        // <bdi> keeps right-to-left room names from reordering the text around them.
+        main.innerHTML = "<strong><bdi>" + esc(p.name || "") + "</bdi></strong><br><span class=\"rr-hint\"><bdi>" + esc((p.rooms || []).join(", ") || "all rooms") + "</bdi> · <bdi class=\"rr-nowrap\">" + esc(passes) + "</bdi></span>";
+        const side = document.createElement("span");
+        side.className = "rr-side";
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "btn btn-outline-primary btn-sm m-0";
+        edit.textContent = "Edit";
+        edit.addEventListener("click", async () => {
+          const fresh = await loadConfig();
+          editProgram(fresh.block, i);
+        });
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn btn-outline-danger btn-sm m-0";
+        del.textContent = "Delete";
+        del.addEventListener("click", () => serial(async () => {
+          const fresh = await loadConfig();
+          if (!fresh.block.programs || !fresh.block.programs[i]) return;
+          fresh.block.programs.splice(i, 1); // the (possibly empty) list is always sent, see setRoomFan
+          await commit(fresh.cfg);
+          resetProgramForm(fresh.block);
+        }));
+        side.appendChild(edit);
+        side.appendChild(del);
+        li.appendChild(main);
+        li.appendChild(side);
+        list.appendChild(li);
+      });
+      const box = $("rr-prog-rooms");
+      if (!box.dataset.filled) {
+        box.dataset.filled = "1";
+        box.innerHTML = roomNames.map((r, i) =>
+          '<div class="form-check"><input class="form-check-input" type="checkbox" id="rr-room-' + i + '" value="' + esc(r).replace(/"/g, "&quot;") + '">' +
+          '<label class="form-check-label" for="rr-room-' + i + '">' + esc(r) + "</label></div>").join("");
+        resetProgramForm(block);
+      } else if (editIndex === null) {
+        // Keep the "Default (n passes)" label in step with the setting below.
+        fillPasses($("rr-prog-repeat"), defaultRepeat, $("rr-prog-repeat").value);
+      }
+    }
+
+    $("rr-prog-add").addEventListener("click", () => serial(async () => {
+      const name = $("rr-prog-name").value.trim();
+      const rooms = [...document.querySelectorAll("#rr-prog-rooms input:checked")].map((c) => c.value);
+      const repeat = $("rr-prog-repeat").value;
+      if (!name) return homebridge.toast.warning("Enter a fan name.");
+      if (!rooms.length) return homebridge.toast.warning("Select at least one room.");
+      const { cfg, block } = await loadConfig();
+      block.programs = block.programs || [];
+      const editing = editIndex !== null && block.programs[editIndex] ? block.programs[editIndex] : null;
+      if (block.programs.some((p) => p !== editing && norm(p && p.name) === norm(name))) {
+        return homebridge.toast.warning("A combination with this name already exists.");
+      }
+      const target = editing || {};
+      target.name = name;
+      target.rooms = rooms;
+      if (repeat) target.repeat = clampRepeat(repeat);
+      else delete target.repeat;
+      if (!editing) block.programs.push(target);
+      await commit(cfg);
+      resetProgramForm(block);
+      homebridge.toast.success((editing ? "Updated." : "Added.") + " Press Save and restart Homebridge.");
+    }));
+
+    $("rr-prog-cancel").addEventListener("click", async () => {
+      const { block } = await loadConfig();
+      resetProgramForm(block);
+    });
+
+    // ---------- account ----------
+
+    async function refresh() {
+      const status = await homebridge.request("/status");
+      const seen = new Set();
+      roomNames = (status.rooms || []).filter((r) => norm(r) && !seen.has(norm(r)) && seen.add(norm(r)));
+      const showRooms = status.loggedIn && roomNames.length;
+      $("rr-programs").style.display = showRooms ? "block" : "none";
+      $("rr-room-card").style.display = showRooms ? "block" : "none";
+      if (showRooms) {
+        await renderRooms();
+        await renderPrograms();
+      }
+      $("rr-logged-in").style.display = status.loggedIn ? "block" : "none";
+      $("rr-logged-out").style.display = status.loggedIn ? "none" : "block";
+      if (status.loggedIn) {
+        $("rr-email-shown").textContent = status.email;
+        $("rr-rooms").textContent = roomNames.length
+          ? roomNames.length + " rooms found on the robot."
+          : "Restart Homebridge to load the rooms from your robot.";
+      } else {
+        const config = await homebridge.getPluginConfig();
+        if (config[0] && config[0].email) $("rr-email").value = config[0].email;
+      }
+    }
+
+    async function rememberEmail(email) {
+      const config = await homebridge.getPluginConfig();
+      const block = config[0] || { platform: "RoborockRoomClean", name: "Roborock Room Clean" };
+      if (block.email !== email) {
+        block.email = email;
+        config[0] = block;
+        await homebridge.updatePluginConfig(config);
+      }
+    }
+
+    function errorText(e) {
+      return (e && (e.message || (e.error && e.error.message))) || String(e);
+    }
+
+    $("rr-send").addEventListener("click", async () => {
+      const email = $("rr-email").value.trim();
+      if (!email) return homebridge.toast.warning("Enter your Roborock email first.");
+      homebridge.showSpinner();
+      try {
+        await homebridge.request("/send-code", { email });
+        homebridge.toast.success("Check your inbox for the Roborock code.");
+        $("rr-code").focus();
+      } catch (e) {
+        homebridge.toast.error(errorText(e), "Could not send the code");
+      } finally {
+        homebridge.hideSpinner();
+      }
+    });
+
+    $("rr-do-login").addEventListener("click", async () => {
+      const email = $("rr-email").value.trim();
+      const code = $("rr-code").value.trim();
+      if (!email || !code) return homebridge.toast.warning("Enter your email and the code.");
+      homebridge.showSpinner();
+      try {
+        const res = await homebridge.request("/login", { email, code });
+        await rememberEmail(email);
+        await homebridge.savePluginConfig();
+        $("rr-unsaved").style.display = "none";
+        homebridge.toast.success(
+          "Found: " + (res.robots || []).join(", ") + ". Restart Homebridge to create the room fans.",
+          "Logged in"
+        );
+        await refresh();
+      } catch (e) {
+        homebridge.toast.error(errorText(e), "Login failed");
+      } finally {
+        homebridge.hideSpinner();
+      }
+    });
+
+    $("rr-logout").addEventListener("click", async () => {
+      await homebridge.request("/logout");
+      homebridge.toast.info("Logged out.");
+      await refresh();
+    });
+
+    // The form below changed (fan name, default passes, "fan for every room"):
+    // redraw the lists so they show the new defaults.
+    homebridge.addEventListener("configChanged", async () => {
+      $("rr-unsaved").style.display = "block";
+      if (!roomNames.length) return;
+      await renderRooms();
+      await renderPrograms();
+    });
+
+    await refresh();
+    homebridge.showSchemaForm();
+  })();
+</script>

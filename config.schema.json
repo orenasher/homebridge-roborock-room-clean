@@ -1,0 +1,303 @@
+{
+  "pluginAlias": "RoborockRoomClean",
+  "pluginType": "platform",
+  "singular": true,
+  "customUi": true,
+  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. No Roborock routines are used, so the app's 10-routine limit does not apply.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Roborock Room Clean",
+        "required": true
+      },
+      "email": {
+        "title": "Roborock account email",
+        "type": "string",
+        "description": "Filled in automatically when you log in above."
+      },
+      "nameTemplate": {
+        "title": "Fan name",
+        "type": "string",
+        "default": "Clean {room}",
+        "placeholder": "Clean {room}",
+        "description": "{room} is replaced by the room name from the Roborock app, e.g. \"Clean {room}\" or \"ניקוי {room}\"."
+      },
+      "autoRooms": {
+        "title": "Create a fan for every room",
+        "type": "boolean",
+        "default": true
+      },
+      "suction": {
+        "title": "Starting fan speed / suction",
+        "type": "string",
+        "default": "max",
+        "oneOf": [
+          {
+            "title": "Quiet (25%)",
+            "enum": [
+              "quiet"
+            ]
+          },
+          {
+            "title": "Balanced (50%)",
+            "enum": [
+              "balanced"
+            ]
+          },
+          {
+            "title": "Turbo (75%)",
+            "enum": [
+              "turbo"
+            ]
+          },
+          {
+            "title": "Max (100%)",
+            "enum": [
+              "max"
+            ]
+          },
+          {
+            "title": "Max+ (needs the option below)",
+            "enum": [
+              "max_plus"
+            ]
+          }
+        ],
+        "description": "The level each fan starts at. After that each fan remembers the last speed you chose in Apple Home."
+      },
+      "mopMode": {
+        "title": "Vacuum / mop",
+        "type": "string",
+        "default": "vacuum_only",
+        "oneOf": [
+          {
+            "title": "Vacuum only",
+            "enum": [
+              "vacuum_only"
+            ]
+          },
+          {
+            "title": "Don't change (use the robot's current setting)",
+            "enum": [
+              "unchanged"
+            ]
+          }
+        ]
+      },
+      "repeat": {
+        "title": "Passes",
+        "type": "integer",
+        "default": 2,
+        "minimum": 1,
+        "maximum": 3,
+        "description": "Default for every room and combination. A room or combination can have its own number in the lists above."
+      },
+      "restoreSettings": {
+        "title": "Restore the previous suction/mop setting when the clean ends",
+        "type": "boolean",
+        "default": true,
+        "description": "So cleans started from the Roborock app or Siri keep using your usual settings."
+      },
+      "excludeRooms": {
+        "title": "Rooms without an automatic fan",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "title": "Room name"
+        },
+        "description": "Managed from the Rooms list at the top of the plugin settings."
+      },
+      "roomSettings": {
+        "title": "Per-room settings",
+        "description": "Managed from the Rooms list at the top of the plugin settings.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "room": {
+              "title": "Room name (as in the Roborock app)",
+              "type": "string"
+            },
+            "repeat": {
+              "title": "Passes",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            }
+          }
+        }
+      },
+      "programs": {
+        "title": "Custom programs (each one is another fan)",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Fan name",
+              "type": "string",
+              "required": true
+            },
+            "rooms": {
+              "title": "Rooms (names as in the Roborock app; leave empty for every room)",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "title": "Room"
+              }
+            },
+            "suction": {
+              "title": "Starting fan speed / suction",
+              "type": "string",
+              "oneOf": [
+                {
+                  "title": "Quiet (25%)",
+                  "enum": [
+                    "quiet"
+                  ]
+                },
+                {
+                  "title": "Balanced (50%)",
+                  "enum": [
+                    "balanced"
+                  ]
+                },
+                {
+                  "title": "Turbo (75%)",
+                  "enum": [
+                    "turbo"
+                  ]
+                },
+                {
+                  "title": "Max (100%)",
+                  "enum": [
+                    "max"
+                  ]
+                },
+                {
+                  "title": "Max+ (needs the option below)",
+                  "enum": [
+                    "max_plus"
+                  ]
+                }
+              ]
+            },
+            "mopMode": {
+              "title": "Vacuum / mop",
+              "type": "string",
+              "oneOf": [
+                {
+                  "title": "Vacuum only",
+                  "enum": [
+                    "vacuum_only"
+                  ]
+                },
+                {
+                  "title": "Don't change",
+                  "enum": [
+                    "unchanged"
+                  ]
+                }
+              ]
+            },
+            "repeat": {
+              "title": "Passes",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "robot": {
+              "title": "Robot (only if you have more than one)",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "skipDevices": {
+        "title": "Robots to ignore (name or device id)",
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "enableMaxPlus": {
+        "title": "Add Max+ as the top fan speed (only for robots that have Max+)",
+        "type": "boolean",
+        "default": false,
+        "description": "With this on the fan has 5 steps: 20% Quiet, 40% Balanced, 60% Turbo, 80% Max, 100% Max+."
+      },
+      "robotIp": {
+        "title": "Robot IP address (optional)",
+        "type": "string",
+        "format": "ipv4",
+        "description": "Normally found automatically. Commands are sent directly to the robot on your network, with the Roborock cloud as backup."
+      },
+      "chargingSensor": {
+        "title": "Add a charging sensor for each robot",
+        "type": "boolean",
+        "default": true,
+        "description": "A contact sensor: closed while the robot is on the dock charging (or fully charged), open while it is off the dock. It also shows the battery level."
+      },
+      "chargingSensorName": {
+        "title": "Charging sensor name",
+        "type": "string",
+        "placeholder": "S8 Charging",
+        "description": "Default: the robot's name + \"Charging\", e.g. \"S8 Charging\". You can write e.g. \"שואב בטעינה\"."
+      },
+      "statusInterval": {
+        "title": "Check the robot's status every (seconds)",
+        "type": "integer",
+        "default": 60,
+        "minimum": 30
+      }
+    }
+  },
+  "layout": [
+    "name",
+    "email",
+    {
+      "type": "fieldset",
+      "title": "Room fans",
+      "expandable": false,
+      "items": [
+        "nameTemplate",
+        "autoRooms",
+        "suction",
+        "enableMaxPlus",
+        "mopMode",
+        "repeat",
+        "restoreSettings"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Charging sensor and battery",
+      "expandable": true,
+      "items": [
+        "chargingSensor",
+        "chargingSensorName",
+        "statusInterval"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced",
+      "expandable": true,
+      "items": [
+        "robotIp",
+        {
+          "key": "skipDevices",
+          "type": "array",
+          "orderable": false,
+          "buttonText": "Add robot",
+          "items": [
+            "skipDevices[]"
+          ]
+        }
+      ]
+    }
+  ]
+}

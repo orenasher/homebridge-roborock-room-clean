@@ -119,10 +119,13 @@ class RoborockRoomCleanPlatform {
     }
 
     const roomNames = new Map((home.rooms || []).map((r) => [String(r.id), r.name]));
+    this.auth = auth;
     this.session = new RoborockSession(auth.userData, this.log);
     this.session.start();
 
     const wanted = new Set();
+    const routineEntries = this.routineEntries();
+    let routinesComplete = true;
     for (const robot of robots) {
       const netFile = `net-${robot.duid}.json`;
       const savedIp = (this.config.robotIps || {})[robot.name] || this.config.robotIp || (this.readJson(netFile) || {}).ip;
@@ -146,6 +149,28 @@ class RoborockRoomCleanPlatform {
       for (const def of this.buildPrograms(robot, segments, robots.length > 1)) {
         wanted.add(def.uuid);
         this.setupAccessory(def, channel);
+      }
+      if (routineEntries.length) {
+        const list = await this.loadRoutines(auth, robot);
+        if (!list) {
+          // The list could not be read: keep the switches that already exist
+          // instead of removing them (and their automations) from Apple Home.
+          routinesComplete = false;
+          for (const a of this.accessories.values()) {
+            if (a.context.routine && a.context.duid === robot.duid) wanted.add(a.UUID);
+          }
+        } else {
+          for (const def of this.buildRoutines(robot, list, routineEntries, robots.length > 1)) {
+            wanted.add(def.uuid);
+            this.setupRoutine(def, channel);
+          }
+        }
+      }
+    }
+    if (routinesComplete) {
+      const missing = routineEntries.filter((e) => !e.matched).map((e) => e.name || e.id);
+      if (missing.length) {
+        this.log.warn(`Routine(s) not found in the Roborock app: ${missing.join(", ")}. Untick them in the plugin settings.`);
       }
     }
 
@@ -186,6 +211,139 @@ class RoborockRoomCleanPlatform {
     this.log.error(`${channel.name}: could not read the room list (is the robot online and is a map saved?).`);
     return [];
   }
+
+  // ---------- routines ----------
+
+  /** The routines ticked in the plugin settings: [{ id, name }] (either may be missing). */
+  routineEntries() {
+    const out = [];
+    for (const item of Array.isArray(this.config.routines) ? this.config.routines : []) {
+      const entry = item && typeof item === "object" ? item : { name: item };
+      const id = entry.id == null ? "" : String(entry.id).trim();
+      const name = entry.name == null ? "" : String(entry.name).trim();
+      if (id || name) out.push({ id, name, matched: false });
+    }
+    return out;
+  }
+
+  /** Routine list of one robot: [{ id, name }], or null when it cannot be read and nothing is saved. */
+  async loadRoutines(auth, robot) {
+    const cacheFile = `routines-${robot.duid}.json`;
+    let lastErr;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const list = await cloud.getRoutines(auth, robot.duid);
+        this.writeJson(cacheFile, list);
+        this.log.info(`${robot.name}: routines ${list.map((r) => r.name).join(", ") || "(none)"}`);
+        return list;
+      } catch (err) {
+        lastErr = err;
+        this.log.debug(`${robot.name}: reading routines failed (attempt ${attempt}): ${err.message}`);
+      }
+      if (attempt < 2) await sleep(3000);
+    }
+    const cached = this.readJson(cacheFile);
+    if (Array.isArray(cached)) {
+      this.log.warn(`${robot.name}: could not read the routines (${lastErr.message}), using the saved list.`);
+      return cached;
+    }
+    this.log.error(`${robot.name}: could not read the routines (${lastErr.message}).`);
+    return null;
+  }
+
+  buildRoutines(robot, list, entries, multiRobot) {
+    // Same rule as the fan name: the routine name is always part of the switch name.
+    let template = String(this.config.routineNameTemplate || "{routine}").trim();
+    if (!/\{routine\}/i.test(template)) template = template ? `${template} {routine}` : "{routine}";
+    const norm = (s) => String(s == null ? "" : s).trim().toLowerCase();
+    const byId = new Map(list.map((r) => [String(r.id), r]));
+    const defs = new Map();
+    for (const entry of entries) {
+      // The id survives a rename in the Roborock app; the name is the fallback
+      // for a config that was written by hand.
+      const routine =
+        (entry.id && byId.get(entry.id)) ||
+        (entry.name && (list.find((r) => norm(r.name) === norm(entry.name)) || byId.get(entry.name)));
+      if (!routine) continue;
+      entry.matched = true;
+      const base = template.replace(/\{routine\}/gi, routine.name).trim();
+      const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${robot.duid}:routine:${routine.id}`);
+      defs.set(uuid, {
+        kind: "routine",
+        uuid,
+        name: multiRobot ? `${base} (${robot.name})` : base,
+        robot,
+        routineId: routine.id,
+        routineName: routine.name,
+      });
+    }
+    return [...defs.values()];
+  }
+
+  /** A switch that starts a routine from the Roborock app and stays on while the robot is cleaning. */
+  setupRoutine(def, channel) {
+    const { Service, Characteristic } = this.api.hap;
+    let accessory = this.accessories.get(def.uuid);
+    const nameChanged = !accessory || accessory.context.name !== def.name;
+    if (!accessory) {
+      accessory = new this.api.platformAccessory(def.name, def.uuid);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      this.accessories.set(def.uuid, accessory);
+      this.log.info(`Added "${def.name}".`);
+    }
+    accessory.context.name = def.name;
+    accessory.context.duid = def.robot.duid;
+    accessory.context.routine = { id: def.routineId, name: def.routineName };
+
+    accessory
+      .getService(Service.AccessoryInformation)
+      .setCharacteristic(Characteristic.Manufacturer, "Roborock")
+      .setCharacteristic(Characteristic.Model, def.robot.name || "Robot vacuum")
+      .setCharacteristic(Characteristic.SerialNumber, `${def.robot.sn || def.robot.duid}-routine-${def.routineId}`);
+
+    const service = accessory.getService(Service.Switch) || accessory.addService(Service.Switch, def.name);
+    service.setCharacteristic(Characteristic.Name, def.name);
+    // As with the fans: a rename done in the Home app is kept across restarts.
+    if (Characteristic.ConfiguredName && nameChanged) {
+      if (!service.testCharacteristic(Characteristic.ConfiguredName)) service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      service.setCharacteristic(Characteristic.ConfiguredName, def.name);
+    }
+
+    const program = { ...def, channel, accessory, service, running: false, pollTimer: null, restore: null, startTimer: null, idlePolls: 0 };
+    this.programs.set(def.uuid, program);
+
+    const on = service.getCharacteristic(Characteristic.On);
+    on.onGet(() => program.running);
+    on.onSet((value) => {
+      if (!value) this.requestStop(program);
+      else if (!program.running) this.startRoutine(program);
+    });
+    on.updateValue(false);
+  }
+
+  async startRoutine(program) {
+    const { channel } = program;
+    this.takeOver(program);
+    this.setRunning(program, true);
+    this.log.info(`${program.name}: starting the routine "${program.routineName}".`);
+    try {
+      const status = await channel.getStatus().catch(() => null);
+      if (status && status.in_cleaning) {
+        await channel.send("app_stop", []).catch(() => {});
+        await sleep(2000);
+      }
+      await cloud.runRoutine(this.auth, program.routineId);
+      program.startedAt = Date.now();
+      program.idlePolls = 0;
+      this.schedulePoll(program, 30000);
+    } catch (err) {
+      this.log.error(`${program.name}: could not start: ${err.message}`);
+      this.setRunning(program, false);
+      await this.restoreSettings(program);
+    }
+  }
+
+  // ---------- room fans ----------
 
   buildPrograms(robot, segments, multiRobot) {
     const c = this.config;
@@ -250,8 +408,6 @@ class RoborockRoomCleanPlatform {
     }
     return defs;
   }
-
-  // ---------- accessories ----------
 
   // ---------- charging sensor ----------
 
@@ -486,21 +642,29 @@ class RoborockRoomCleanPlatform {
   setRunning(program, running) {
     const { Characteristic } = this.api.hap;
     program.running = running;
+    if (program.kind === "routine") {
+      program.service.updateCharacteristic(Characteristic.On, running);
+      return;
+    }
     program.service.updateCharacteristic(Characteristic.Active, running ? 1 : 0);
     program.service.updateCharacteristic(Characteristic.RotationSpeed, this.levelToSpeed(program.accessory.context.level));
   }
 
-  async startProgram(program) {
-    const { channel } = program;
-    // Only one program per robot can run at a time.
+  /** Only one fan or routine per robot can run at a time: switch the others off. */
+  takeOver(program) {
     for (const other of this.programs.values()) {
-      if (other !== program && other.channel === channel && other.running) {
+      if (other !== program && other.channel === program.channel && other.running) {
         clearTimeout(other.pollTimer);
         this.setRunning(other, false);
         program.restore = program.restore || other.restore;
         other.restore = null;
       }
     }
+  }
+
+  async startProgram(program) {
+    const { channel } = program;
+    this.takeOver(program);
     this.setRunning(program, true);
     const rooms = `rooms ${program.segments.join(",")}`;
     this.log.info(`${program.name}: starting (${rooms}, suction ${program.suction}, ${program.mopMode}, x${program.repeat}).`);
@@ -573,11 +737,18 @@ class RoborockRoomCleanPlatform {
     this.updateChargingSensor(program.robot.duid, status);
     const graceOver = Date.now() - program.startedAt > 60000;
     if (graceOver && !status.in_cleaning) {
+      // A routine can have several steps with a short pause in between, so it
+      // only counts as finished when the robot is idle on two checks in a row.
+      if (program.kind === "routine" && ++program.idlePolls < 2) {
+        this.schedulePoll(program, 20000);
+        return;
+      }
       this.log.info(`${program.name}: finished.`);
       this.setRunning(program, false);
       await this.restoreSettings(program);
       return;
     }
+    if (status.in_cleaning) program.idlePolls = 0;
     this.schedulePoll(program, 20000);
   }
 
@@ -586,6 +757,12 @@ class RoborockRoomCleanPlatform {
     program.restore = null;
     if (!r) return;
     try {
+      if (program.kind === "routine") {
+        // Settings saved by a room fan this routine took over from.
+        if (r.fanPower) await program.channel.send("set_custom_mode", [r.fanPower]);
+        if (r.waterBoxMode) await program.channel.send("set_water_box_custom_mode", [r.waterBoxMode]);
+        return;
+      }
       if (r.fanPower && r.fanPower !== SUCTION[program.suction]) await program.channel.send("set_custom_mode", [r.fanPower]);
       if (r.waterBoxMode && program.mopMode === "vacuum_only" && r.waterBoxMode !== WATER_OFF) {
         await program.channel.send("set_water_box_custom_mode", [r.waterBoxMode]);

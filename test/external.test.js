@@ -281,9 +281,83 @@ test("a whole-home routine started in the Roborock app turns its switch on", asy
   await wait(2800);
   assert.equal(run.byName("כל הבית").running, true);
   assert.equal(run.byName("מטבח").running, false);
-  assert.equal(run.robotLog.filter((r) => r.method === "get_map_v1").length, 1);
+  assert.equal(run.robotLog.filter((r) => r.method === "get_map_v1").length, 0, "a whole-home routine is recognised without the map");
   run.stop();
   assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});
+
+test("the robot's own report makes an outside clean show within seconds, over the home network only", async () => {
+  const robot = { status: { state: 8, in_cleaning: 0, fan_power: 104, water_box_mode: 200, battery: 100 }, cleaning: [17] };
+  const routines = [
+    { id: 7, name: "מטבח", steps: [{ kind: "segments", segments: [17], fanPower: 104, waterBoxMode: 200 }] },
+    { id: 8, name: "כל הבית", steps: [{ kind: "all", fanPower: 104, waterBoxMode: 200 }] },
+  ];
+  // The regular check is a minute apart: only the quick reads can notice the clean in time.
+  const run = await startPlatform({ statusInterval: 60, routines: [{ id: "7" }, { id: "8" }] }, robot, routines);
+  const monitor = run.platform.monitors.get(DUID);
+  const channel = monitor.channel;
+  // A robot on the home network: every command is answered there.
+  let localReads = 0;
+  channel.local = {
+    host: "10.0.0.9",
+    connect: async () => {},
+    close() {},
+    send: async (method) => {
+      if (method === "get_status") localReads++;
+      return { result: method === "get_status" ? [robot.status] : ["ok"] };
+    },
+  };
+  await wait(2500); // first regular check: on the dock, read over the home network
+  assert.equal(localReads, 1);
+  const cloudReads = () => run.robotLog.filter((r) => r.method === "get_status").length;
+  const cloudBefore = cloudReads();
+
+  // The routine is pressed in the Roborock app. The robot first reports "starting",
+  // and only says "cleaning" a few seconds later.
+  robot.status = { ...robot.status, state: 1 };
+  channel.onPush({ state: 1 });
+  await wait(2000);
+  assert.equal(localReads, 2, "looked right after the robot's report");
+  assert.equal(run.byName("כל הבית").running, false);
+  robot.status = { ...robot.status, state: 5, in_cleaning: 1 };
+  await wait(4500);
+  assert.equal(run.byName("כל הבית").running, true, "noticed by a quick follow-up read, long before the next regular check");
+  assert.ok(run.logs.some((l) => /showing it as on\. \d+s after the robot reported it\./.test(l)), run.logs.join("\n"));
+  const readsWhenFound = localReads;
+  await wait(4500);
+  assert.equal(localReads, readsWhenFound, "the quick reads stop once the clean is recognised");
+  assert.equal(cloudReads(), cloudBefore, "none of this went through the cloud");
+
+  // Without a working home-network connection the robot's reports do not cause quick reads.
+  run.byName("כל הבית").service.getCharacteristic("On").setFn(false);
+  await wait(200);
+  monitor.quietUntil = 0;
+  monitor.job = null;
+  channel.lastVia = "cloud";
+  const before = localReads;
+  channel.onPush({ state: 3 });
+  channel.onPush({ state: 5 });
+  await wait(2500);
+  assert.equal(localReads, before, "no quick reads when the last command had to go through the cloud");
+  run.stop();
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});
+
+test("a clean of ours that was stopped long ago does not hide a new one started elsewhere", async () => {
+  const robot = { status: { state: 8, in_cleaning: 3, fan_power: 104, water_box_mode: 200, battery: 90 }, cleaning: [17] };
+  const run = await startPlatform({}, robot);
+  const monitor = run.platform.monitors.get(DUID);
+  // The robot kept "not finished" from a clean the plugin stopped; it sits on the dock.
+  monitor.job = { ours: true };
+  await wait(2600);
+  assert.ok([...run.platform.programs.values()].every((p) => !p.running), "docked with an unfinished clean: nothing is shown");
+  // Now it is cleaning the kitchen again, and nobody used Home.
+  robot.status = { ...robot.status, state: 18 };
+  monitor.full = null;
+  await run.platform.readStatus(DUID, monitor.channel);
+  await wait(400);
+  assert.equal(run.byName("Clean מטבח").running, true);
+  run.stop();
 });
 
 test("language: Hebrew gives Hebrew default names, typed names are kept", async () => {

@@ -32,6 +32,18 @@ const TEXT = {
 /** After the plugin stops a clean, the robot still reports "cleaning" for a moment: do not mistake that for a new one. */
 const QUIET_AFTER_STOP_MS = 60000;
 
+/**
+ * After the robot reports by itself that it started doing something, its
+ * status is read every few seconds for a short while, so a clean started
+ * outside Apple Home shows up quickly. Only over the home network: these
+ * reads never go through the Roborock cloud.
+ */
+const CLOSE_WATCH_MS = 45000;
+const CLOSE_WATCH_STEP_MS = 4000;
+
+/** States in which the robot is actively cleaning (not returning, charging or paused). */
+const CLEANING_STATES = new Set([5, 11, 17, 18]);
+
 /** When the robot would not say which rooms it is cleaning, do not ask again for a while. */
 const NO_MAP_PAUSE_MS = 10 * 60 * 1000;
 
@@ -53,7 +65,7 @@ class RoborockRoomCleanPlatform {
     this.session = null;
     this.stopped = false;
     this.text = TEXT[this.config.language] || TEXT.en;
-    this.externalRetryMs = 15000; // wait between attempts to read which rooms an outside clean covers
+    this.externalRetryMs = 8000; // wait between attempts to read which rooms an outside clean covers
     this.ready = false; // true once every fan and switch exists
 
     api.on("didFinishLaunching", () => {
@@ -506,7 +518,7 @@ class RoborockRoomCleanPlatform {
     const saved = this.readJson(`status-${robot.duid}.json`);
     const known = saved && typeof saved.battery === "number" && typeof saved.state === "number" ? { state: saved.state, battery: saved.battery } : null;
     // Until the first answer arrives, Home shows the values from before the restart.
-    const monitor = { robot, channel, last: known, full: null, fullAt: 0, inflight: null, fails: 0, staleWarned: false, timer: null, dueAt: 0, polledAt: 0, job: null, quietUntil: 0, noMapUntil: 0 };
+    const monitor = { robot, channel, last: known, full: null, fullAt: 0, inflight: null, fails: 0, staleWarned: false, timer: null, dueAt: 0, polledAt: 0, job: null, quietUntil: 0, noMapUntil: 0, closeUntil: 0, reportedAt: 0 };
     this.monitors.set(robot.duid, monitor);
     const intervalMs = Math.max(30, Number(this.config.statusInterval) || 60) * 1000;
     monitor.tick = async () => {
@@ -514,12 +526,17 @@ class RoborockRoomCleanPlatform {
       clearTimeout(monitor.timer);
       monitor.timer = null;
       try {
-        await this.readStatus(robot.duid, channel, STATUS_SHARE_MS);
+        // While watching closely a fresh answer is wanted, not one from a few seconds ago.
+        await this.readStatus(robot.duid, channel, this.watchingClosely(monitor) ? 1000 : STATUS_SHARE_MS);
       } catch (err) {
         this.log.debug(`${robot.name}: status update failed: ${err.message}`);
       }
       if (this.stopped) return;
       if (monitor.timer) return; // a sooner check was requested meanwhile
+      if (this.watchingClosely(monitor)) {
+        this.refreshStatusSoon(robot.duid, CLOSE_WATCH_STEP_MS);
+        return;
+      }
       const away = monitor.last && !RoborockRoomCleanPlatform.isCharging(monitor.last);
       const base = away ? Math.min(intervalMs, 30000) : intervalMs;
       this.refreshStatusSoon(robot.duid, Math.min(base * 2 ** Math.min(monitor.fails, 6), 10 * 60 * 1000));
@@ -585,12 +602,32 @@ class RoborockRoomCleanPlatform {
     const monitor = this.monitors.get(duid);
     if (!monitor || !update) return;
     const next = { ...(monitor.last || {}) };
+    const stateChanged = typeof update.state === "number" && next.state !== update.state;
     if (typeof update.state === "number") next.state = update.state;
     if (typeof update.battery === "number") next.battery = update.battery;
     this.log.debug(`${monitor.robot.name}: robot reported ${JSON.stringify(update)}`);
     if (typeof next.state === "number" && typeof next.battery === "number") this.updateStatus(duid, next);
+    // The robot started doing something that nobody asked for in Home: most
+    // likely a clean started in the Roborock app. Look right away, and keep
+    // looking every few seconds until it is clear what it is.
+    if (stateChanged && !RoborockRoomCleanPlatform.isCharging(next) && !monitor.job && !this.busy(duid) && this.canWatchClosely(monitor)) {
+      if (!monitor.reportedAt) monitor.reportedAt = Date.now();
+      monitor.closeUntil = Date.now() + CLOSE_WATCH_MS;
+      this.refreshStatusSoon(duid, 1500);
+      return;
+    }
     // Follow up with a full status read, but never more than one every 30 seconds.
     this.refreshStatusSoon(duid, Math.max(3000, 30000 - (Date.now() - monitor.polledAt)));
+  }
+
+  /** Quick status reads are only done over the home network, and only while that works. */
+  canWatchClosely(monitor) {
+    return this.config.followExternal !== false && this.ready && !!monitor.channel.local && monitor.channel.lastVia === "local" && monitor.fails === 0;
+  }
+
+  /** True for a short while after the robot reported a change, until the clean it started is recognised. */
+  watchingClosely(monitor) {
+    return Date.now() < monitor.closeUntil && !monitor.job && this.canWatchClosely(monitor);
   }
 
   /** New status for one robot: update the charging sensor and the battery on its fans. */
@@ -728,11 +765,18 @@ class RoborockRoomCleanPlatform {
   watchExternal(monitor, status) {
     if (!status.in_cleaning) {
       monitor.job = null;
+      if (RoborockRoomCleanPlatform.isCharging(status)) monitor.reportedAt = 0;
       return;
     }
     // Not every fan and switch exists yet (Homebridge is starting): look again at the next status.
-    if (monitor.job || !this.ready) return;
+    if (!this.ready) return;
     const duid = monitor.robot.duid;
+    if (monitor.job) {
+      // A clean of ours that was stopped a while ago, no fan or switch is on,
+      // and the robot is cleaning again: that is a new clean, started elsewhere.
+      const over = monitor.job.ours && !this.busy(duid) && Date.now() >= monitor.quietUntil && CLEANING_STATES.has(status.state);
+      if (!over) return;
+    }
     const job = { ours: this.busy(duid) || Date.now() < monitor.quietUntil };
     monitor.job = job;
     if (job.ours || this.config.followExternal === false) return;
@@ -754,10 +798,14 @@ class RoborockRoomCleanPlatform {
     if (!programs().length) return;
     // Give up as soon as the clean ended or a fan/switch was used in Home meanwhile.
     const current = () => !this.stopped && monitor.job === job && !this.busy(robot.duid) && Date.now() >= monitor.quietUntil;
-    let candidates = [];
+    let candidates = programs();
     let match = null;
     let what = "a zone";
-    if (status.in_cleaning !== 2) {
+    // A whole-home clean (1) with a whole-home routine switch needs no map at all.
+    if (status.in_cleaning === 1) match = this.matchExternal(candidates, "all", null, status);
+    if (match) {
+      what = "the whole home";
+    } else if (status.in_cleaning !== 2) {
       // A room clean (3) gets three tries: the map is sometimes a little behind.
       const tries = status.in_cleaning === 1 ? 1 : 3;
       let rooms = null;
@@ -765,7 +813,7 @@ class RoborockRoomCleanPlatform {
         if (attempt > 1) await sleep(this.externalRetryMs);
         if (!current()) return;
         try {
-          const ids = await channel.getCleaningSegments();
+          const ids = await channel.getCleaningSegments(8000);
           if (ids.length) rooms = ids;
           else this.log.debug(`${robot.name}: the map marks no rooms as being cleaned (attempt ${attempt}).`);
         } catch (err) {
@@ -779,7 +827,6 @@ class RoborockRoomCleanPlatform {
         match = this.matchExternal(candidates, "segments", rooms, status);
       } else if (status.in_cleaning === 1) {
         what = "the whole home";
-        match = this.matchExternal(candidates, "all", null, status);
       } else {
         monitor.noMapUntil = Date.now() + NO_MAP_PAUSE_MS;
         this.log.info(`${robot.name}: a clean was started outside Apple Home, but the robot did not report which rooms, so no switch is shown as on.`);
@@ -796,7 +843,9 @@ class RoborockRoomCleanPlatform {
       );
       return;
     }
-    this.log.info(`${match.name}: started outside Apple Home (${what}), showing it as on.`);
+    // How long it took, counted from the robot's own report that it started (when there was one).
+    const took = monitor.reportedAt ? ` ${Math.max(1, Math.round((Date.now() - monitor.reportedAt) / 1000))}s after the robot reported it.` : "";
+    this.log.info(`${match.name}: started outside Apple Home (${what}), showing it as on.${took}`);
     this.adopt(match);
   }
 

@@ -67,7 +67,7 @@ Starting a routine goes through the Roborock cloud (routines are stored there), 
 
 A routine pressed in the Roborock app, a scheduled routine or a room clean started from another app shows in Apple Home too: the matching routine switch (or the fan for those rooms) turns on, and turns off when the clean ends. Turning it off in Apple Home stops the robot and sends it back to the dock.
 
-The robot does not say which routine it is running, so the plugin reads from the robot's live map which rooms are being cleaned and compares them with the rooms saved in each routine. When two routines clean the same rooms, the one whose suction and water settings the robot is using is picked. It usually shows within half a minute. Notes:
+The robot does not say which routine it is running, so the plugin reads from the robot's live map which rooms are being cleaned and compares them with the rooms saved in each routine. When two routines clean the same rooms, the one whose suction and water settings the robot is using is picked. When the robot is reachable on the home network this takes a few seconds: the robot reports by itself that it started, and the plugin then reads its status every few seconds until it knows what is running. Otherwise it shows at the next regular status check. A whole-home clean that has a whole-home routine switch needs no map at all. Notes:
 
 - Only routines you ticked in the Routines list have a switch to show it on. A room clean that matches no routine shows on the fan (or combination) for exactly those rooms.
 - A whole-home clean shows on a routine that cleans the whole home. Zone cleans are not shown.

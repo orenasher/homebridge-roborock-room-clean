@@ -20,6 +20,20 @@ test("protocol round trip", () => {
   assert.equal(P.decodeMessage(frame, LOCAL_KEY), null);
 });
 
+test("a payload over 64 KB (a big map) is read although its size does not fit the length field", () => {
+  const big = require("crypto").randomBytes(70000);
+  const frame = P.encodeMessage({ localKey: LOCAL_KEY, protocol: 301, payload: big, ts: 1700000000 });
+  const msg = P.decodeMessage(frame, LOCAL_KEY);
+  assert.ok(msg, "decoded");
+  assert.equal(msg.protocol, 301);
+  assert.ok(msg.payload.equals(big));
+  frame[40000] ^= 0xff;
+  assert.equal(P.decodeMessage(frame, LOCAL_KEY), null, "still checked against its checksum");
+  // Ordinary sizes are untouched, also right at the limit of the field.
+  const edge = require("crypto").randomBytes(65519); // 65520 bytes once padded
+  assert.ok(P.decodeMessage(P.encodeMessage({ localKey: LOCAL_KEY, protocol: 301, payload: edge, ts: 1700000000 }), LOCAL_KEY).payload.equals(edge));
+});
+
 test("encodeTimestamp matches python-roborock", () => {
   // hex "6553f100", picked at indices [5,6,3,7,1,2,0,4]
   assert.equal(P.encodeTimestamp(0x6553f100), "1030556f");

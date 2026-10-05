@@ -35,9 +35,9 @@ function fakeMap(cleaning) {
 }
 
 /** The body of a protocol-301 map answer for request `id`, encrypted with the request's nonce. */
-function mapAnswer(id, nonceHex, map) {
+function mapAnswer(id, nonceHex, map, endpoint = "ENDPOINT") {
   const head = Buffer.alloc(24);
-  head.write("ENDPOINT", 0, "ascii");
+  head.write(endpoint, 0, "latin1");
   head.writeUInt16LE(id, 16);
   const cipher = crypto.createCipheriv("aes-128-cbc", Buffer.from(nonceHex, "hex"), Buffer.alloc(16));
   return Buffer.concat([head, cipher.update(zlib.gzipSync(map)), cipher.final()]);
@@ -69,6 +69,10 @@ function startFakeBroker(robotLog, robot = {}) {
           const req = JSON.parse(JSON.parse(msg.payload.toString()).dps["101"]);
           robotLog.push(req);
           let result = ["ok"];
+          const wantsMap = req.method === "get_map_v1";
+          // "retry": the robot is still preparing the map.
+          const notReady = wantsMap && robot.retries > 0 && robot.retries--;
+          if (notReady) result = ["retry"];
           if (req.method === "get_room_mapping") result = [[16, "111", 14], [17, "222", 14]];
           if (req.method === "get_status") result = [robot.status || { state: 8, in_cleaning: 0, fan_power: 101, water_box_mode: 202, battery: 87 }];
           const ts = Math.floor(Date.now() / 1000);
@@ -85,9 +89,9 @@ function startFakeBroker(robotLog, robot = {}) {
           publish(102, Buffer.from(JSON.stringify({ dps: { 102: JSON.stringify({ id: req.id, result }) }, t: ts })));
           // The map itself follows the "ok" as a separate message. First one that
           // belongs to another app on the same account (it must be ignored).
-          if (req.method === "get_map_v1" && robot.cleaning) {
-            publish(301, mapAnswer(req.id, crypto.randomBytes(16).toString("hex"), fakeMap([99])));
-            publish(301, mapAnswer(req.id, req.security.nonce, fakeMap(robot.cleaning)));
+          if (wantsMap && !notReady && robot.cleaning && (!robot.answersMap || robot.answersMap(req))) {
+            publish(301, mapAnswer(req.id, crypto.randomBytes(16).toString("hex"), fakeMap([99]), "SOMEONE="));
+            publish(301, mapAnswer(req.id, req.security.nonce, fakeMap(robot.cleaning), req.security.endpoint));
           }
         }
       }

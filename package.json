@@ -1,7 +1,7 @@
 {
   "name": "homebridge-roborock-room-clean",
   "displayName": "Roborock Room Clean",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "A fan in Apple Home for every room on your Roborock map: turn it on to clean the room, the fan speed sets the suction power. Vacuum-only and number of passes configurable, with no 10-routine limit. Your Roborock app routines can be added as switches too, and show when they are started from the Roborock app. Settings in English or Hebrew.",
   "main": "index.js",
   "license": "MIT",

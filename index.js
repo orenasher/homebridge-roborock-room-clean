@@ -809,27 +809,37 @@ class RoborockRoomCleanPlatform {
       // A room clean (3) gets three tries: the map is sometimes a little behind.
       const tries = status.in_cleaning === 1 ? 1 : 3;
       let rooms = null;
+      const reasons = []; // what each try came to, for the log when none worked
       for (let attempt = 1; attempt <= tries && !rooms; attempt++) {
         if (attempt > 1) await sleep(this.externalRetryMs);
         if (!current()) return;
         try {
-          const ids = await channel.getCleaningSegments(8000);
-          if (ids.length) rooms = ids;
-          else this.log.debug(`${robot.name}: the map marks no rooms as being cleaned (attempt ${attempt}).`);
+          const answer = await channel.getCleaning(8000, attempt);
+          if (answer.rooms.length) rooms = answer.rooms;
+          else reasons.push(`the map marks no rooms (it has blocks ${answer.blocks.join(",")})`);
         } catch (err) {
-          this.log.debug(`${robot.name}: reading the rooms being cleaned failed (attempt ${attempt}): ${err.message}`);
+          reasons.push(err.message);
         }
       }
       if (!current()) return;
       candidates = programs();
+      // Newer robots also name the room they are in right now in their status.
+      const here = status.cleaning_info && Number(status.cleaning_info.segment_id);
       if (rooms) {
         what = `room${rooms.length > 1 ? "s" : ""} ${rooms.join(",")}`;
         match = this.matchExternal(candidates, "segments", rooms, status);
       } else if (status.in_cleaning === 1) {
         what = "the whole home";
+      } else if (Number.isInteger(here) && here > 0) {
+        what = `room ${here}, from the robot's status`;
+        match = this.matchExternal(candidates, "segments", [here], status) || this.onlyRoutineWith(candidates, here);
       } else {
         monitor.noMapUntil = Date.now() + NO_MAP_PAUSE_MS;
-        this.log.info(`${robot.name}: a clean was started outside Apple Home, but the robot did not report which rooms, so no switch is shown as on.`);
+        this.log.info(
+          `${robot.name}: a clean was started outside Apple Home, but the robot did not report which rooms, so no switch is shown as on. ` +
+            `Tries: ${reasons.map((r, i) => `${i + 1}) ${r}`).join("; ")}. ` +
+            `Status: in_cleaning=${status.in_cleaning}, state=${status.state}${status.cleaning_info ? `, cleaning_info=${JSON.stringify(status.cleaning_info)}` : ""}.`
+        );
         return;
       }
     }
@@ -878,6 +888,12 @@ class RoborockRoomCleanPlatform {
     const fan = candidates.find((p) => p.kind !== "routine" && key(p.segments) === want) || null;
     if (best && !(best.weak && fan)) return best.program;
     return fan;
+  }
+
+  /** The one routine switch whose routine includes this room, or null when none or several do. */
+  onlyRoutineWith(candidates, room) {
+    const found = candidates.filter((p) => p.kind === "routine" && (p.steps || []).some((step) => step.kind === "segments" && step.segments.includes(room)));
+    return found.length === 1 ? found[0] : null;
   }
 
   /** Show a clean that is already running on its switch or fan, and follow it until it ends. */

@@ -231,11 +231,15 @@ test("outside cleans: nothing matches, the robot sends no map, or the option is 
   run = await startPlatform({}, robot);
   const channel = run.platform.monitors.get(DUID).channel;
   const original = channel.getMap.bind(channel);
-  channel.getMap = () => original(200);
+  channel.getMap = (ms, attempt) => original(200, attempt);
   await wait(4200);
   assert.equal(run.robotLog.filter((r) => r.method === "get_map_v1").length, 3);
   assert.ok([...run.platform.programs.values()].every((p) => !p.running));
-  assert.ok(run.logs.some((l) => l.includes("did not report which rooms")), run.logs.join("\n"));
+  const failure = run.logs.find((l) => l.includes("did not report which rooms"));
+  assert.ok(failure, run.logs.join("\n"));
+  // The log says what each try came to, asked both ways, and what the robot's status was.
+  assert.match(failure, /Tries: 1\) the robot said ok but sent no map \(own endpoint\); 2\) the robot said ok but sent no map \(account endpoint\); 3\) .*own endpoint/);
+  assert.match(failure, /Status: in_cleaning=3, state=18\./);
   assert.equal(channel.cloudTimeouts, 0, "a missing map does not slow the other requests down");
   // The next step of the same routine (idle in between) does not ask again for a while.
   robot.status = { ...robot.status, in_cleaning: 0 };
@@ -253,7 +257,7 @@ test("outside cleans: nothing matches, the robot sends no map, or the option is 
   run = await startPlatform({}, robot);
   const ch = run.platform.monitors.get(DUID).channel;
   const plain = ch.getMap.bind(ch);
-  ch.getMap = () => plain(200);
+  ch.getMap = (ms, attempt) => plain(200, attempt);
   await wait(2300); // first try failed, second one is waiting
   run.platform.quiet(DUID); // what turning a fan on and off again in Home does
   robot.cleaning = [17]; // the second try would now find the kitchen
@@ -357,6 +361,74 @@ test("a clean of ours that was stopped long ago does not hide a new one started 
   await run.platform.readStatus(DUID, monitor.channel);
   await wait(400);
   assert.equal(run.byName("Clean מטבח").running, true);
+  run.stop();
+});
+
+test("map requests: own endpoint and one key, the account's endpoint as second way, retry answers", async () => {
+  const account = require("crypto").createHash("md5").update(RRIOT.k).digest().subarray(8, 14).toString("base64");
+  // Asked under an endpoint of our own, always with the same key.
+  let robot = { cleaning: [17] };
+  let run = await startPlatform({}, robot);
+  let channel = run.platform.monitors.get(DUID).channel;
+  assert.deepEqual(await channel.getCleaningSegments(2000, 1), [17]);
+  assert.deepEqual(await channel.getCleaningSegments(2000, 2), [17], "once a way worked it is kept, whatever the attempt number");
+  const asked = run.robotLog.filter((r) => r.method === "get_map_v1");
+  assert.equal(asked.length, 2);
+  assert.notEqual(asked[0].security.endpoint, account);
+  assert.equal(asked[0].security.endpoint, asked[1].security.endpoint);
+  assert.equal(asked[0].security.nonce, asked[1].security.nonce);
+  assert.match(asked[0].security.nonce, /^[0-9a-f]{32}$/);
+  // Ordinary commands are sent as before.
+  const plain = run.robotLog.find((r) => r.method === "get_room_mapping");
+  assert.equal(plain.security.endpoint, account);
+  run.stop();
+
+  // A robot that only answers the account's endpoint: the second try asks that way, and it is remembered.
+  robot = { status: { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [17], answersMap: (req) => req.security.endpoint === account };
+  run = await startPlatform({}, robot);
+  channel = run.platform.monitors.get(DUID).channel;
+  const original = channel.getMap.bind(channel);
+  channel.getMap = (ms, attempt) => original(300, attempt);
+  await wait(3400);
+  assert.equal(run.byName("Clean מטבח").running, true, run.logs.join("\n"));
+  assert.equal(channel.mapShared, true);
+  run.stop();
+
+  // "retry" twice, then the map.
+  robot = { cleaning: [16], retries: 2 };
+  run = await startPlatform({}, robot);
+  channel = run.platform.monitors.get(DUID).channel;
+  assert.deepEqual(await channel.getCleaningSegments(8000, 1), [16]);
+  assert.equal(run.robotLog.filter((r) => r.method === "get_map_v1").length, 3);
+  // Nothing but "retry": the reason says so.
+  robot.retries = 99;
+  await assert.rejects(channel.getMap(2500, 1), /the robot answered "retry" 2 times \(own endpoint\)/);
+  run.stop();
+});
+
+test("no map, but the robot's status names the room it is in", async () => {
+  const robot = { status: { state: 18, in_cleaning: 3, fan_power: 104, water_box_mode: 200, battery: 80, cleaning_info: { target_segment_id: -1, segment_id: 17, fan_power: 104 } } };
+  const routines = [
+    { id: 1, name: "מטבח וסלון", steps: [{ kind: "segments", segments: [16, 17], fanPower: 104, waterBoxMode: 200 }] },
+    { id: 2, name: "סלון", steps: [{ kind: "segments", segments: [16], fanPower: 104, waterBoxMode: 200 }] },
+  ];
+  // No fan for the kitchen alone, and one routine that includes it.
+  let run = await startPlatform({ autoRooms: false, routines: [{ id: "1" }, { id: "2" }] }, robot, routines);
+  let channel = run.platform.monitors.get(DUID).channel;
+  let original = channel.getMap.bind(channel);
+  channel.getMap = (ms, attempt) => original(150, attempt);
+  await wait(3800);
+  assert.equal(run.byName("מטבח וסלון").running, true, run.logs.join("\n"));
+  assert.equal(run.byName("סלון").running, false);
+  run.stop();
+  // With a fan for exactly that room, the fan is the better answer.
+  run = await startPlatform({ routines: [{ id: "1" }] }, robot, routines);
+  channel = run.platform.monitors.get(DUID).channel;
+  original = channel.getMap.bind(channel);
+  channel.getMap = (ms, attempt) => original(150, attempt);
+  await wait(3800);
+  assert.equal(run.byName("Clean מטבח").running, true, run.logs.join("\n"));
+  assert.equal(run.byName("מטבח וסלון").running, false);
   run.stop();
 });
 

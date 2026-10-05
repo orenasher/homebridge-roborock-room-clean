@@ -3,7 +3,7 @@
   "pluginType": "platform",
   "singular": true,
   "customUi": true,
-  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. No Roborock routines are used, so the app's 10-routine limit does not apply.",
+  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. The room fans use no Roborock routines, so the app's 10-routine limit does not apply. The routines you do have in the Roborock app can be added as switches from the Routines list above.",
   "schema": {
     "type": "object",
     "properties": {
@@ -216,6 +216,31 @@
           }
         }
       },
+      "routines": {
+        "title": "Routines shown in Apple Home (each one is a switch)",
+        "description": "Managed from the Routines list at the top of the plugin settings.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "Routine id (filled in automatically)",
+              "type": "string"
+            },
+            "name": {
+              "title": "Routine name (as in the Roborock app)",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "routineNameTemplate": {
+        "title": "Switch name",
+        "type": "string",
+        "default": "{routine}",
+        "placeholder": "{routine}",
+        "description": "{routine} is replaced by the routine name from the Roborock app, e.g. \"{routine}\" or \"תוכנית {routine}\"."
+      },
       "skipDevices": {
         "title": "Robots to ignore (name or device id)",
         "type": "array",
@@ -235,6 +260,12 @@
         "format": "ipv4",
         "description": "Normally found automatically. Commands are sent directly to the robot on your network, with the Roborock cloud as backup."
       },
+      "batteryOnFans": {
+        "title": "Show the battery level and charging state on every fan and routine switch",
+        "type": "boolean",
+        "default": true,
+        "description": "Open a fan's or switch's settings in Apple Home to see the robot's battery and whether it is on the dock charging. With this on you can turn the separate charging sensor off, unless you use it in automations."
+      },
       "chargingSensor": {
         "title": "Add a charging sensor for each robot",
         "type": "boolean",
@@ -251,7 +282,8 @@
         "title": "Check the robot's status every (seconds)",
         "type": "integer",
         "default": 60,
-        "minimum": 30
+        "minimum": 30,
+        "description": "How often the robot is asked for its status while it sits on the dock. Away from the dock it is asked every 30 seconds, and changes the robot reports itself (leaving the dock, battery level) show up right away."
       }
     }
   },
@@ -274,9 +306,18 @@
     },
     {
       "type": "fieldset",
+      "title": "Routine switches",
+      "expandable": true,
+      "items": [
+        "routineNameTemplate"
+      ]
+    },
+    {
+      "type": "fieldset",
       "title": "Charging sensor and battery",
       "expandable": true,
       "items": [
+        "batteryOnFans",
         "chargingSensor",
         "chargingSensorName",
         "statusInterval"

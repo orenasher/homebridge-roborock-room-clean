@@ -47,6 +47,15 @@
   </div>
 </div>
 
+<div class="card mb-3" id="rr-routine-card" style="display: none">
+  <div class="card-body">
+    <h5 class="card-title mb-2">Routines</h5>
+    <p class="rr-hint mb-2">The routines you made in the Roborock app. Tick a routine to add a switch for it to Apple Home, untick it to remove the switch. Turning the switch on starts the routine; turning it off sends the robot back to the dock.</p>
+    <p class="rr-hint mb-2" id="rr-routine-note" style="display: none"></p>
+    <ul class="list-group mb-0" id="rr-routine-list"></ul>
+  </div>
+</div>
+
 <div class="card mb-3" id="rr-programs" style="display: none">
   <div class="card-body">
     <h5 class="card-title mb-2">Room combinations</h5>
@@ -77,6 +86,9 @@
     const $ = (id) => document.getElementById(id);
 
     let roomNames = [];
+    let routines = []; // [{ id, name, scheduled, robot }] from the Roborock app
+    let routineRobots = 0;
+    let routineError = "";
     let editIndex = null; // index of the combination being edited, or null
 
     function esc(t) {
@@ -133,10 +145,7 @@
         .then(fn)
         .catch((e) => homebridge.toast.error(errorText(e)))
         .then(async () => {
-          if (--pending === 0) {
-            await renderRooms();
-            await renderPrograms();
-          }
+          if (--pending === 0) await renderAll();
         });
       return queue;
     }
@@ -230,6 +239,110 @@
         li.appendChild(side);
         list.appendChild(li);
       });
+    }
+
+    // ---------- routines ----------
+
+    /** Same naming rule as the plugin: the routine name is always part of the switch name. */
+    function switchName(block, routine) {
+      let template = String(block.routineNameTemplate || "{routine}").trim();
+      if (!/\{routine\}/i.test(template)) template = template ? template + " {routine}" : "{routine}";
+      return template.replace(/\{routine\}/gi, routine).trim();
+    }
+
+    /** The ticked routines in the config: [{ id, name }]. */
+    function routineEntries(block) {
+      const out = [];
+      for (const item of Array.isArray(block.routines) ? block.routines : []) {
+        const entry = item && typeof item === "object" ? item : { name: item };
+        const id = entry.id == null ? "" : String(entry.id).trim();
+        const name = entry.name == null ? "" : String(entry.name).trim();
+        if (id || name) out.push({ id, name });
+      }
+      return out;
+    }
+
+    /** The routine a config entry points at: by id, else by name (same rule as the plugin). */
+    function findRoutine(entry) {
+      return (
+        (entry.id && routines.find((r) => r.id === entry.id)) ||
+        (entry.name && (routines.find((r) => norm(r.name) === norm(entry.name)) || routines.find((r) => r.id === entry.name))) ||
+        null
+      );
+    }
+
+    async function setRoutineSwitch(routine, on) {
+      const { cfg, block } = await loadConfig();
+      const list = routineEntries(block).filter((e) => findRoutine(e) !== routine);
+      if (on) list.push({ id: routine.id, name: routine.name });
+      block.routines = list; // sent even when empty, see setRoomFan
+      await commit(cfg);
+    }
+
+    /** Remove a ticked routine that no longer exists in the Roborock app. */
+    async function dropRoutineEntry(entry) {
+      const { cfg, block } = await loadConfig();
+      block.routines = routineEntries(block).filter((e) => !(e.id === entry.id && norm(e.name) === norm(entry.name)));
+      await commit(cfg);
+    }
+
+    function routineRow(i, checked, title, hint, off, onChange) {
+      const li = document.createElement("li");
+      li.className = "list-group-item rr-row";
+      const main = document.createElement("div");
+      main.className = "form-check rr-main";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.className = "form-check-input";
+      box.id = "rr-routine-" + i;
+      box.checked = checked;
+      box.addEventListener("change", () => onChange(box.checked));
+      const label = document.createElement("label");
+      label.className = "form-check-label";
+      label.htmlFor = box.id;
+      // <bdi> keeps right-to-left names from reordering the text around them.
+      label.innerHTML = "<strong><bdi>" + esc(title) + "</bdi></strong><br><span class=\"rr-hint\">" + hint + "</span>";
+      if (off) label.classList.add("rr-off");
+      main.appendChild(box);
+      main.appendChild(label);
+      li.appendChild(main);
+      return li;
+    }
+
+    async function renderRoutines() {
+      const { block } = await loadConfig();
+      const entries = routineEntries(block);
+      const ticked = new Set(entries.map(findRoutine).filter(Boolean));
+      const missing = routineError ? [] : entries.filter((e) => !findRoutine(e));
+      const list = $("rr-routine-list");
+      list.innerHTML = "";
+      routines.forEach((routine, i) => {
+        const on = ticked.has(routine);
+        const parts = [on ? "Switch: <bdi>" + esc(switchName(block, routine.name)) + "</bdi>" : "No switch in Apple Home"];
+        if (routineRobots > 1) parts.push("<bdi>" + esc(routine.robot) + "</bdi>");
+        if (routine.scheduled) parts.push("also runs on a schedule");
+        list.appendChild(routineRow(i, on, routine.name, parts.join(" · "), !on, (checked) => serial(() => setRoutineSwitch(routine, checked))));
+      });
+      missing.forEach((entry, i) => {
+        const row = routineRow("gone-" + i, true, entry.name || entry.id, "Not found in the Roborock app any more. Untick to remove it.", true, (checked) => {
+          if (!checked) serial(() => dropRoutineEntry(entry));
+        });
+        list.appendChild(row);
+      });
+      const note = $("rr-routine-note");
+      let text = "";
+      if (routineError) text = "Could not load the routines from Roborock (" + routineError + ")." + (routines.length ? " Showing the last saved list." : "");
+      else if (!routines.length && !missing.length) text = "No routines were found. Make one in the Roborock app (Routines), then open these settings again.";
+      note.textContent = text;
+      note.style.display = text ? "block" : "none";
+    }
+
+    async function renderAll() {
+      if (roomNames.length) {
+        await renderRooms();
+        await renderPrograms();
+      }
+      await renderRoutines();
     }
 
     // ---------- combinations ----------
@@ -358,6 +471,21 @@
         await renderRooms();
         await renderPrograms();
       }
+      routines = [];
+      routineRobots = 0;
+      routineError = "";
+      if (status.loggedIn) {
+        try {
+          const res = await homebridge.request("/routines");
+          routines = res.routines || [];
+          routineRobots = res.robots || 0;
+          routineError = res.error || "";
+        } catch (e) {
+          routineError = errorText(e);
+        }
+        await renderRoutines();
+      }
+      $("rr-routine-card").style.display = status.loggedIn ? "block" : "none";
       $("rr-logged-in").style.display = status.loggedIn ? "block" : "none";
       $("rr-logged-out").style.display = status.loggedIn ? "none" : "block";
       if (status.loggedIn) {
@@ -428,13 +556,11 @@
       await refresh();
     });
 
-    // The form below changed (fan name, default passes, "fan for every room"):
+    // The form below changed (fan or switch name, default passes, "fan for every room"):
     // redraw the lists so they show the new defaults.
     homebridge.addEventListener("configChanged", async () => {
       $("rr-unsaved").style.display = "block";
-      if (!roomNames.length) return;
-      await renderRooms();
-      await renderPrograms();
+      await renderAll();
     });
 
     await refresh();

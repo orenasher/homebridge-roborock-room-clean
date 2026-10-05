@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { HomebridgePluginUiServer, RequestError } = require("@homebridge/plugin-ui-utils");
-const { RoborockLogin, getHomeData } = require("../lib/cloud");
+const { RoborockLogin, getHomeData, getRoutines } = require("../lib/cloud");
 
 const STORAGE_DIR = "roborock-room-clean";
 
@@ -14,6 +14,7 @@ class UiServer extends HomebridgePluginUiServer {
     this.login = null;
 
     this.onRequest("/status", () => this.status());
+    this.onRequest("/routines", () => this.routines());
     this.onRequest("/send-code", (p) => this.sendCode(p));
     this.onRequest("/login", (p) => this.doLogin(p));
     this.onRequest("/logout", () => this.logout());
@@ -38,6 +39,58 @@ class UiServer extends HomebridgePluginUiServer {
     } catch {
       return { loggedIn: false };
     }
+  }
+
+  readJson(file) {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(this.dir, file), "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The routines of every robot, read live from Roborock so that a routine
+   * made a minute ago in the app shows up without a Homebridge restart. Falls
+   * back to the list the plugin saved at its last start.
+   */
+  async routines() {
+    const auth = this.readJson("auth.json");
+    if (!auth || !auth.userData) return { routines: [], robots: 0 };
+    let home = this.readJson("home-cache.json");
+    if (!home) {
+      try {
+        home = await getHomeData(auth);
+      } catch (err) {
+        return { routines: [], robots: 0, error: err.message };
+      }
+    }
+    const products = new Map((home.products || []).map((p) => [p.id, p]));
+    const robots = [...(home.devices || []), ...(home.receivedDevices || [])].filter((d) => {
+      const product = products.get(d.productId);
+      const isVacuum = !product || !product.category || /vacuum|robot/i.test(product.category);
+      return d && d.duid && isVacuum && (!d.pv || d.pv === "1.0");
+    });
+    const routines = [];
+    let error;
+    await Promise.all(
+      robots.map(async (robot) => {
+        let list;
+        try {
+          list = await getRoutines(auth, robot.duid);
+        } catch (err) {
+          error = err.message;
+          list = this.readJson(`routines-${robot.duid}.json`);
+        }
+        for (const r of Array.isArray(list) ? list : []) {
+          routines.push({ id: String(r.id), name: r.name, scheduled: !!r.scheduled, robot: robot.name, duid: robot.duid });
+        }
+      })
+    );
+    // Promise.all finishes in any order; keep the robots in their own order.
+    const order = new Map(robots.map((r, i) => [r.duid, i]));
+    routines.sort((a, b) => order.get(a.duid) - order.get(b.duid));
+    return { routines, robots: robots.length, error };
   }
 
   async sendCode({ email }) {

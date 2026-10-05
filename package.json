@@ -1,8 +1,8 @@
 {
   "name": "homebridge-roborock-room-clean",
   "displayName": "Roborock Room Clean",
-  "version": "1.3.1",
-  "description": "A fan in Apple Home for every room on your Roborock map: turn it on to clean the room, the fan speed sets the suction power. Vacuum-only and number of passes configurable. No Roborock routines, so no 10-routine limit.",
+  "version": "1.6.0",
+  "description": "A fan in Apple Home for every room on your Roborock map: turn it on to clean the room, the fan speed sets the suction power. Vacuum-only and number of passes configurable, with no 10-routine limit. Your Roborock app routines can be added as switches too.",
   "main": "index.js",
   "license": "MIT",
   "author": "orenasher",
@@ -13,6 +13,7 @@
     "room",
     "rooms",
     "segment",
+    "routine",
     "fan",
     "homekit"
   ],
@@ -33,5 +34,13 @@
     "config.schema.json",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/orenasher/homebridge-roborock-room-clean.git"
+  },
+  "bugs": {
+    "url": "https://github.com/orenasher/homebridge-roborock-room-clean/issues"
+  },
+  "homepage": "https://github.com/orenasher/homebridge-roborock-room-clean#readme"
 }

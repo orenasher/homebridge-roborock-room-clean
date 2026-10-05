@@ -8,7 +8,9 @@ A Homebridge plugin that adds a **fan in Apple Home for every room on your Robor
 - Change the speed while it cleans and the suction changes live.
 - The fan stays on while the robot cleans and turns off when it's done. Turning it off sends the robot back to the dock.
 
-It sends the room-clean command straight to the robot, so it does **not** use Roborock routines ("work plans") and the app's **10-routine limit does not apply**.
+It sends the room-clean command straight to the robot, so the room fans do **not** use Roborock routines ("work plans") and the app's **10-routine limit does not apply**.
+
+The routines you do have in the Roborock app can be added too, each as a **switch**: you tick the ones you want in Apple Home. See [Routines](#routines).
 
 ### Standalone and backup-friendly
 
@@ -17,7 +19,11 @@ It sends the room-clean command straight to the robot, so it does **not** use Ro
 
 ## Charging sensor and battery
 
-For each robot the plugin also adds a **contact sensor**: **closed** while the robot is on the dock charging (or fully charged), **open** while it is off the dock. The same accessory shows the **battery level** (and a low-battery warning under 20%). Use it in automations, e.g. "when the vacuum leaves the dock". Set `chargingSensorName` to rename it, or `chargingSensor: false` to turn it off. The status is checked every 60 seconds (`statusInterval`).
+Every fan and routine switch also shows the robot's **battery level** and whether it is **charging** (on the dock): open its settings in Apple Home. Turn it off with `batteryOnFans: false`.
+
+Status changes show up quickly: the robot reports them itself through the cloud connection, the plugin checks right after a fan starts or stops a clean, and it asks every 30 seconds while the robot is away from the dock (every `statusInterval` seconds on the dock).
+
+For each robot the plugin also adds a **contact sensor**: **closed** while the robot is on the dock charging (or fully charged), **open** while it is off the dock. The same accessory shows the **battery level** (and a low-battery warning under 20%). Use it in automations, e.g. "when the vacuum leaves the dock". Set `chargingSensorName` to rename it, or `chargingSensor: false` to turn it off. Turn the sensor off if the battery on the fans is enough for you.
 
 ## Supported robots
 
@@ -41,6 +47,20 @@ The plugin settings show two lists above the regular options:
 
 Press **Save** and restart Homebridge after changing them.
 
+## Routines
+
+The **Routines** list in the plugin settings shows every routine ("work plan") you made in the Roborock app. It is read live from your Roborock account, so a new routine shows up as soon as you open the settings.
+
+- **Tick** a routine to add a switch for it to Apple Home. **Untick** it to remove the switch. Nothing is added until you tick it.
+- **Turning the switch on** starts the routine, exactly like pressing it in the Roborock app, with the rooms and settings saved in the routine.
+- The switch **stays on while the robot is cleaning** and turns off when it is done. **Turning it off** stops the robot and sends it back to the dock.
+- Only one fan or routine switch per robot runs at a time: starting one turns the others off.
+- Set **Switch name** (under "Routine switches") to e.g. `תוכנית {routine}` to add text around the routine name.
+
+Press **Save** and restart Homebridge after changing the list. A routine keeps its switch when you rename it in the Roborock app.
+
+Starting a routine goes through the Roborock cloud (routines are stored there), so it needs an internet connection. The room fans keep working over the home network.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -55,6 +75,8 @@ Press **Save** and restart Homebridge after changing them.
 | `excludeRooms` | — | Rooms that should not get an automatic fan |
 | `roomSettings` | — | Per-room overrides: `[{ "room": "Kitchen", "repeat": 1 }]`. Rooms not listed use `repeat` |
 | `programs` | — | Extra fans: `{ "name", "rooms": [...], "suction", "mopMode", "repeat" }`. No rooms = every room |
+| `routines` | — | Routines shown as switches: `[{ "name": "Kitchen" }]`. Managed from the Routines list; the list also saves each routine's `id` |
+| `routineNameTemplate` | `{routine}` | Switch name, `{routine}` = routine name from the Roborock app |
 | `skipDevices` | — | Robots to ignore |
 
 Example:
@@ -78,10 +100,11 @@ Example:
 - Room names are read from the robot when Homebridge starts. After renaming, splitting or merging rooms in the Roborock app, restart Homebridge.
 - Turning a fan on while the robot is already cleaning stops the current job and starts the new one. Only one fan per robot runs at a time.
 - Siri: "Turn on Clean Living Room", "Set Clean Living Room to 100%".
+- If you also use another plugin that shows the same routines in Apple Home, tick only the ones you want from this plugin so they do not appear twice.
 
 ## Files
 
-Stored in `<homebridge storage>/roborock-room-clean/`: `auth.json` (the Roborock session), `home-cache.json` and `rooms-<robot>.json` (used when the cloud is unreachable at startup).
+Stored in `<homebridge storage>/roborock-room-clean/`: `auth.json` (the Roborock session), `home-cache.json`, `rooms-<robot>.json` and `routines-<robot>.json` (used when the cloud is unreachable at startup). `status-<robot>.json` keeps the last known battery level and dock state.
 
 ## Credits
 

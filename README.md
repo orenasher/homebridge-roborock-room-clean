@@ -7,6 +7,8 @@ A Homebridge plugin that adds a **fan in Apple Home for every room on your Robor
 - **Vacuum only** (no mopping) and **2 passes** by default. Both can be changed.
 - Change the speed while it cleans and the suction changes live.
 - The fan stays on while the robot cleans and turns off when it's done. Turning it off sends the robot back to the dock.
+- A routine or room clean started from the Roborock app shows in Apple Home too, on its switch or fan.
+- Settings page in English or Hebrew.
 
 It sends the room-clean command straight to the robot, so the room fans do **not** use Roborock routines ("work plans") and the app's **10-routine limit does not apply**.
 
@@ -61,6 +63,23 @@ Press **Save** and restart Homebridge after changing the list. A routine keeps i
 
 Starting a routine goes through the Roborock cloud (routines are stored there), so it needs an internet connection. The room fans keep working over the home network.
 
+## Cleans started outside Apple Home
+
+A routine pressed in the Roborock app, a scheduled routine or a room clean started from another app shows in Apple Home too: the matching routine switch (or the fan for those rooms) turns on, and turns off when the clean ends. Turning it off in Apple Home stops the robot and sends it back to the dock.
+
+The robot does not say which routine it is running, so the plugin reads from the robot's live map which rooms are being cleaned and compares them with the rooms saved in each routine. When two routines clean the same rooms, the one whose suction and water settings the robot is using is picked. It usually shows within half a minute. Notes:
+
+- Only routines you ticked in the Routines list have a switch to show it on. A room clean that matches no routine shows on the fan (or combination) for exactly those rooms.
+- A whole-home clean shows on a routine that cleans the whole home. Zone cleans are not shown.
+- The rooms of each routine are read when Homebridge starts: restart Homebridge after changing a routine in the Roborock app.
+- While such a clean shows as on, turning that switch or fan off in Apple Home (also from a scene that turns everything off) stops the robot, and automations that react to the switch or fan turning on will run.
+- The map is read through the Roborock cloud, normally once per clean (up to three tries when the robot is slow to mark the rooms; if it marks none, the plugin stops asking for ten minutes).
+- Turn the feature off with `followExternal: false` ("Show cleans started outside Apple Home" under Routine switches).
+
+## Language (English / עברית)
+
+The **Language** box at the top of the plugin settings switches the settings page between English (the default) and Hebrew, right-to-left. Hebrew also changes the names the plugin makes up itself for new installs (`ניקוי {room}`, `טעינת S8`). Names you typed and names from the Roborock app are never changed, and the Homebridge log stays in English.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -77,6 +96,8 @@ Starting a routine goes through the Roborock cloud (routines are stored there), 
 | `programs` | — | Extra fans: `{ "name", "rooms": [...], "suction", "mopMode", "repeat" }`. No rooms = every room |
 | `routines` | — | Routines shown as switches: `[{ "name": "Kitchen" }]`. Managed from the Routines list; the list also saves each routine's `id` |
 | `routineNameTemplate` | `{routine}` | Switch name, `{routine}` = routine name from the Roborock app |
+| `followExternal` | `true` | Show cleans started outside Apple Home on the matching switch or fan |
+| `language` | `en` | `en` or `he` (Hebrew): language of the settings page and of the default names |
 | `skipDevices` | — | Robots to ignore |
 
 Example:
@@ -109,3 +130,13 @@ Stored in `<homebridge storage>/roborock-room-clean/`: `auth.json` (the Roborock
 ## Credits
 
 Protocol details based on [python-roborock](https://github.com/Python-roborock/python-roborock) and [homebridge-roborock-matter](https://github.com/mathiashornbek/homebridge-roborock-matter). Not affiliated with Roborock.
+
+## עברית
+
+<div dir="rtl">
+
+התוסף מוסיף לאפליקציית "בית" של Apple מאוורר לכל חדר במפה של שואב Roborock: הדלקת המאוורר מנקה את החדר, ומהירות המאוורר היא עוצמת השאיבה. אפשר להוסיף גם שילובי חדרים, ואת תוכניות העבודה מאפליקציית Roborock כמתגים. תוכנית עבודה שהופעלה מאפליקציית Roborock מוצגת כדלוקה גם ב"בית".
+
+כדי לעבור לעברית: פתח את הגדרות התוסף ב-Homebridge ובחר **עברית** בתיבה **Language / שפה** שבראש העמוד, לחץ על שמירה והפעל מחדש את Homebridge.
+
+</div>

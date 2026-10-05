@@ -20,6 +20,21 @@ const STATE_NAMES = {
   23: "washing the mop", 26: "going to wash the mop", 100: "fully charged",
 };
 
+/**
+ * Names the plugin makes up itself, per language (the `language` setting).
+ * Names the user typed and names from the Roborock app are never translated.
+ */
+const TEXT = {
+  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}` },
+  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}` },
+};
+
+/** After the plugin stops a clean, the robot still reports "cleaning" for a moment: do not mistake that for a new one. */
+const QUIET_AFTER_STOP_MS = 60000;
+
+/** When the robot would not say which rooms it is cleaning, do not ask again for a while. */
+const NO_MAP_PAUSE_MS = 10 * 60 * 1000;
+
 /** How long one status answer is shared between the regular check and a running fan or routine. */
 const STATUS_SHARE_MS = 15000;
 
@@ -37,6 +52,9 @@ class RoborockRoomCleanPlatform {
     this.storageDir = path.join(api.user.storagePath(), STORAGE_DIR);
     this.session = null;
     this.stopped = false;
+    this.text = TEXT[this.config.language] || TEXT.en;
+    this.externalRetryMs = 15000; // wait between attempts to read which rooms an outside clean covers
+    this.ready = false; // true once every fan and switch exists
 
     api.on("didFinishLaunching", () => {
       this.start().catch((err) => this.log.error(`Startup failed: ${err.message}`));
@@ -172,6 +190,7 @@ class RoborockRoomCleanPlatform {
         }
       }
     }
+    this.ready = true;
     if (routinesComplete) {
       const missing = routineEntries.filter((e) => !e.matched).map((e) => e.name || e.id);
       if (missing.length) {
@@ -196,7 +215,7 @@ class RoborockRoomCleanPlatform {
         const mapping = await channel.getRoomMapping();
         const rooms = mapping.map((m) => ({
           segmentId: m.segmentId,
-          name: roomNames.get(m.roomId) || `Room ${m.segmentId}`,
+          name: roomNames.get(m.roomId) || this.text.room(m.segmentId),
         }));
         if (rooms.length) {
           this.writeJson(cacheFile, rooms);
@@ -280,6 +299,7 @@ class RoborockRoomCleanPlatform {
         robot,
         routineId: routine.id,
         routineName: routine.name,
+        steps: Array.isArray(routine.steps) ? routine.steps : [],
       });
     }
     return [...defs.values()];
@@ -332,7 +352,9 @@ class RoborockRoomCleanPlatform {
   async startRoutine(program) {
     const { channel } = program;
     this.takeOver(program);
+    program.adopted = false;
     this.setRunning(program, true);
+    this.claim(program.robot.duid);
     this.log.info(`${program.name}: starting the routine "${program.routineName}".`);
     try {
       const status = await this.readStatus(program.robot.duid, channel, 5000).catch(() => null);
@@ -348,6 +370,7 @@ class RoborockRoomCleanPlatform {
     } catch (err) {
       this.log.error(`${program.name}: could not start: ${err.message}`);
       this.setRunning(program, false);
+      this.quiet(program.robot.duid);
       await this.restoreSettings(program);
     }
   }
@@ -363,7 +386,7 @@ class RoborockRoomCleanPlatform {
     };
     // The room name is always part of the fan name: if the template has no
     // {room} placeholder (easy to lose when typing right-to-left), append it.
-    let template = String(c.nameTemplate || "Clean {room}").trim();
+    let template = String(c.nameTemplate || this.text.fan).trim();
     if (!/\{room\}/i.test(template)) template = template ? `${template} {room}` : "{room}";
     const byName = new Map(segments.map((s) => [s.name.trim().toLowerCase(), s]));
     const defs = [];
@@ -427,7 +450,7 @@ class RoborockRoomCleanPlatform {
   setupChargingSensor(robot, channel, multiRobot) {
     const { Service, Characteristic } = this.api.hap;
     const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${robot.duid}:charging`);
-    const base = this.config.chargingSensorName || `${robot.name} Charging`;
+    const base = this.config.chargingSensorName || this.text.charging(robot.name);
     const name = multiRobot && this.config.chargingSensorName ? `${base} (${robot.name})` : base;
     let accessory = this.accessories.get(uuid);
     const nameChanged = !accessory || accessory.context.name !== name;
@@ -450,7 +473,7 @@ class RoborockRoomCleanPlatform {
       if (!contact.testCharacteristic(Characteristic.ConfiguredName)) contact.addOptionalCharacteristic(Characteristic.ConfiguredName);
       contact.setCharacteristic(Characteristic.ConfiguredName, name);
     }
-    const battery = accessory.getService(Service.Battery) || accessory.addService(Service.Battery, `${name} Battery`);
+    const battery = accessory.getService(Service.Battery) || accessory.addService(Service.Battery, this.text.battery(name));
 
     const dock = { robot, channel, accessory, contact, battery, timer: null, last: accessory.context.last || null };
     this.docks.set(robot.duid, dock);
@@ -483,7 +506,7 @@ class RoborockRoomCleanPlatform {
     const saved = this.readJson(`status-${robot.duid}.json`);
     const known = saved && typeof saved.battery === "number" && typeof saved.state === "number" ? { state: saved.state, battery: saved.battery } : null;
     // Until the first answer arrives, Home shows the values from before the restart.
-    const monitor = { robot, channel, last: known, full: null, fullAt: 0, inflight: null, fails: 0, staleWarned: false, timer: null, dueAt: 0, polledAt: 0 };
+    const monitor = { robot, channel, last: known, full: null, fullAt: 0, inflight: null, fails: 0, staleWarned: false, timer: null, dueAt: 0, polledAt: 0, job: null, quietUntil: 0, noMapUntil: 0 };
     this.monitors.set(robot.duid, monitor);
     const intervalMs = Math.max(30, Number(this.config.statusInterval) || 60) * 1000;
     monitor.tick = async () => {
@@ -526,6 +549,7 @@ class RoborockRoomCleanPlatform {
           monitor.fails = 0;
           monitor.staleWarned = false;
           this.updateStatus(duid, status);
+          this.watchExternal(monitor, status);
           return status;
         })
         .catch((err) => {
@@ -602,7 +626,7 @@ class RoborockRoomCleanPlatform {
       if (existing) accessory.removeService(existing);
       return null;
     }
-    const battery = existing || accessory.addService(Service.Battery, `${def.name} Battery`);
+    const battery = existing || accessory.addService(Service.Battery, this.text.battery(def.name));
     const duid = def.robot.duid;
     battery.getCharacteristic(Characteristic.BatteryLevel).onGet(() => {
       const last = this.lastStatus(duid);
@@ -670,6 +694,154 @@ class RoborockRoomCleanPlatform {
     dock.battery.updateCharacteristic(Characteristic.ChargingState, this.chargingValue(dock.last));
     dock.battery.updateCharacteristic(Characteristic.StatusLowBattery, this.lowBatteryValue(dock.last));
   }
+
+  // ---------- cleans started outside Apple Home ----------
+
+  /** True while a fan or routine switch of this robot is on, or about to start. */
+  busy(duid) {
+    for (const program of this.programs.values()) {
+      if (program.robot.duid === duid && (program.running || program.startTimer)) return true;
+    }
+    return false;
+  }
+
+  /** The clean the robot is doing now (or is about to do) is this plugin's own. */
+  claim(duid) {
+    const monitor = this.monitors.get(duid);
+    if (monitor) monitor.job = { ours: true };
+    return monitor;
+  }
+
+  /** The plugin just stopped a clean on this robot (or failed to start one). */
+  quiet(duid) {
+    const monitor = this.claim(duid);
+    if (monitor) monitor.quietUntil = Date.now() + QUIET_AFTER_STOP_MS;
+  }
+
+  /**
+   * Notice a clean this plugin did not start (a routine pressed in the
+   * Roborock app, a schedule, another plugin) and show it in Apple Home on
+   * the routine switch or fan it belongs to. Every clean is looked at once:
+   * `monitor.job` is set when the robot starts cleaning and cleared when it
+   * is done.
+   */
+  watchExternal(monitor, status) {
+    if (!status.in_cleaning) {
+      monitor.job = null;
+      return;
+    }
+    // Not every fan and switch exists yet (Homebridge is starting): look again at the next status.
+    if (monitor.job || !this.ready) return;
+    const duid = monitor.robot.duid;
+    const job = { ours: this.busy(duid) || Date.now() < monitor.quietUntil };
+    monitor.job = job;
+    if (job.ours || this.config.followExternal === false) return;
+    // The map travels through the cloud: leave it alone while the cloud is not answering.
+    if (Date.now() < monitor.noMapUntil || Date.now() < monitor.channel.cloudPausedUntil) return;
+    this.identifyExternal(monitor, job, status).catch((err) => {
+      this.log.debug(`${monitor.robot.name}: could not work out what was started outside Apple Home: ${err.message}`);
+    });
+  }
+
+  /**
+   * Find the switch or fan for a clean that was started elsewhere. The robot's
+   * status does not say which routine is running, but its live map marks the
+   * rooms being cleaned, and every routine lists its rooms.
+   */
+  async identifyExternal(monitor, job, status) {
+    const { robot, channel } = monitor;
+    const programs = () => [...this.programs.values()].filter((p) => p.robot.duid === robot.duid);
+    if (!programs().length) return;
+    // Give up as soon as the clean ended or a fan/switch was used in Home meanwhile.
+    const current = () => !this.stopped && monitor.job === job && !this.busy(robot.duid) && Date.now() >= monitor.quietUntil;
+    let candidates = [];
+    let match = null;
+    let what = "a zone";
+    if (status.in_cleaning !== 2) {
+      // A room clean (3) gets three tries: the map is sometimes a little behind.
+      const tries = status.in_cleaning === 1 ? 1 : 3;
+      let rooms = null;
+      for (let attempt = 1; attempt <= tries && !rooms; attempt++) {
+        if (attempt > 1) await sleep(this.externalRetryMs);
+        if (!current()) return;
+        try {
+          const ids = await channel.getCleaningSegments();
+          if (ids.length) rooms = ids;
+          else this.log.debug(`${robot.name}: the map marks no rooms as being cleaned (attempt ${attempt}).`);
+        } catch (err) {
+          this.log.debug(`${robot.name}: reading the rooms being cleaned failed (attempt ${attempt}): ${err.message}`);
+        }
+      }
+      if (!current()) return;
+      candidates = programs();
+      if (rooms) {
+        what = `room${rooms.length > 1 ? "s" : ""} ${rooms.join(",")}`;
+        match = this.matchExternal(candidates, "segments", rooms, status);
+      } else if (status.in_cleaning === 1) {
+        what = "the whole home";
+        match = this.matchExternal(candidates, "all", null, status);
+      } else {
+        monitor.noMapUntil = Date.now() + NO_MAP_PAUSE_MS;
+        this.log.info(`${robot.name}: a clean was started outside Apple Home, but the robot did not report which rooms, so no switch is shown as on.`);
+        return;
+      }
+    }
+    if (!match) {
+      const known = candidates
+        .filter((p) => p.kind === "routine")
+        .map((p) => `${p.name} [${(p.steps || []).map((step) => (step.kind === "segments" ? step.segments.join(",") : step.kind)).join(" | ")}]`);
+      this.log.info(
+        `${robot.name}: a clean of ${what} was started outside Apple Home; no routine switch or fan matches it.` +
+          (known.length ? ` Routine switches and their rooms: ${known.join("; ")}.` : "")
+      );
+      return;
+    }
+    this.log.info(`${match.name}: started outside Apple Home (${what}), showing it as on.`);
+    this.adopt(match);
+  }
+
+  /**
+   * The routine switch whose routine cleans exactly these rooms (when two do,
+   * the one whose suction and water settings the robot is using now), else
+   * the fan or combination for exactly these rooms.
+   *
+   * A routine with several groups of rooms is also listed per group (see
+   * routineSteps). Such a part of a routine only beats a fan for the same
+   * rooms when the robot is using that group's settings: otherwise a plain
+   * kitchen clean would light up every routine that happens to include the
+   * kitchen.
+   */
+  matchExternal(candidates, kind, rooms, status) {
+    const key = (ids) => [...new Set((ids || []).map(Number))].sort((a, b) => a - b).join(",");
+    const want = key(rooms);
+    let best = null;
+    for (const program of candidates) {
+      if (program.kind !== "routine") continue;
+      for (const step of program.steps || []) {
+        if (step.kind !== kind) continue;
+        if (kind === "segments" && key(step.segments) !== want) continue;
+        const settings = (step.fanPower === status.fan_power ? 1 : 0) + (step.waterBoxMode === status.water_box_mode ? 1 : 0);
+        const score = (step.partial ? 0 : 10) + settings;
+        if (!best || score > best.score) best = { program, score, weak: !!step.partial && settings < 2 };
+      }
+    }
+    if (kind !== "segments") return best ? best.program : null;
+    const fan = candidates.find((p) => p.kind !== "routine" && key(p.segments) === want) || null;
+    if (best && !(best.weak && fan)) return best.program;
+    return fan;
+  }
+
+  /** Show a clean that is already running on its switch or fan, and follow it until it ends. */
+  adopt(program) {
+    program.adopted = true;
+    program.restore = null; // the settings are not ours to put back
+    program.startedAt = 0; // already cleaning: no start-up grace
+    program.idlePolls = 0;
+    this.setRunning(program, true);
+    this.schedulePoll(program, 20000);
+  }
+
+  // ---------- fan speed ----------
 
   /** Suction levels on the fan slider, lowest first. */
   levels() {
@@ -828,7 +1000,9 @@ class RoborockRoomCleanPlatform {
   async startProgram(program) {
     const { channel } = program;
     this.takeOver(program);
+    program.adopted = false;
     this.setRunning(program, true);
+    this.claim(program.robot.duid);
     const rooms = `rooms ${program.segments.join(",")}`;
     this.log.info(`${program.name}: starting (${rooms}, suction ${program.suction}, ${program.mopMode}, x${program.repeat}).`);
 
@@ -862,6 +1036,7 @@ class RoborockRoomCleanPlatform {
     } catch (err) {
       this.log.error(`${program.name}: could not start: ${err.message}`);
       this.setRunning(program, false);
+      this.quiet(program.robot.duid);
       await this.restoreSettings(program);
     }
   }
@@ -869,6 +1044,7 @@ class RoborockRoomCleanPlatform {
   async stopProgram(program) {
     clearTimeout(program.pollTimer);
     this.setRunning(program, false);
+    this.quiet(program.robot.duid);
     this.log.info(`${program.name}: stopping and returning to the dock.`);
     try {
       await program.channel.send("app_stop", []);

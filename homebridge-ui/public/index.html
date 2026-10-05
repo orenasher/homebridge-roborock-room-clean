@@ -8,49 +8,67 @@
   .rr-off { opacity: 0.55; }
   .rr-nowrap { white-space: nowrap; }
   .rr-unsaved { display: none; border: 1px solid #ffa000; border-radius: 0.3rem; padding: 0.5rem 0.75rem; }
+  .rr-lang { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+  .rr-section { margin-top: 1.25rem; }
+  .rr-section > summary, .rr-section > h6 { font-weight: 600; margin-bottom: 0.75rem; }
+  .rr-section > summary { cursor: pointer; }
+  .rr-field { margin-bottom: 1rem; }
+  .rr-field > label { display: block; margin-bottom: 0.25rem; }
+  .rr-field .rr-hint { margin: 0.25rem 0 0; }
+  /* Hebrew: the page runs right to left; these put checkboxes and lists on the right side too. */
+  [dir="rtl"] body, [dir="rtl"] .card { text-align: right; }
+  [dir="rtl"] .list-group { padding-right: 0; }
+  [dir="rtl"] .form-check { padding-left: 0; padding-right: 1.5em; }
+  [dir="rtl"] .form-check .form-check-input { float: right; margin-left: 0; margin-right: -1.5em; }
 </style>
+
+<div class="rr-lang mb-3">
+  <label for="rr-lang" class="mb-0">Language / שפה</label>
+  <select class="form-control form-control-sm rr-select" id="rr-lang">
+    <option value="en">English</option>
+    <option value="he">עברית</option>
+  </select>
+</div>
 
 <div class="card mb-3" id="rr-login">
   <div class="card-body">
-    <h5 class="card-title mb-3">Roborock account</h5>
+    <h5 class="card-title mb-3" data-t="account.title">Roborock account</h5>
 
     <div id="rr-logged-in" style="display: none">
-      <p class="mb-2">Logged in as <strong id="rr-email-shown"></strong>.</p>
+      <p class="mb-2"><span data-t="account.loggedInAs">Logged in as</span> <strong><bdi id="rr-email-shown"></bdi></strong></p>
       <p class="mb-2 rr-hint" id="rr-rooms"></p>
-      <button type="button" class="btn btn-outline-danger btn-sm m-0" id="rr-logout">Log out</button>
+      <button type="button" class="btn btn-outline-danger btn-sm m-0" id="rr-logout" data-t="account.logout">Log out</button>
     </div>
 
     <div id="rr-logged-out" style="display: none">
-      <p class="rr-hint">
-        Use the email of your Roborock app account. Roborock will email you a verification code.
-      </p>
+      <p class="rr-hint" data-t="account.help">Use the email of your Roborock app account. Roborock will email you a verification code.</p>
       <div class="form-group">
-        <label for="rr-email">Email</label>
-        <input type="email" class="form-control" id="rr-email" autocomplete="username" />
+        <label for="rr-email" data-t="account.email">Email</label>
+        <input type="email" class="form-control" id="rr-email" autocomplete="username" dir="ltr" />
       </div>
-      <button type="button" class="btn btn-primary m-0 mb-3" id="rr-send">Send code</button>
+      <button type="button" class="btn btn-primary m-0 mb-3" id="rr-send" data-t="account.sendCode">Send code</button>
       <div class="form-group">
-        <label for="rr-code">Verification code</label>
-        <input type="text" class="form-control" id="rr-code" inputmode="numeric" autocomplete="one-time-code" />
+        <label for="rr-code" data-t="account.code">Verification code</label>
+        <input type="text" class="form-control" id="rr-code" inputmode="numeric" autocomplete="one-time-code" dir="ltr" />
       </div>
-      <button type="button" class="btn btn-primary m-0" id="rr-do-login">Log in</button>
+      <button type="button" class="btn btn-primary m-0" id="rr-do-login" data-t="account.login">Log in</button>
     </div>
   </div>
 </div>
 
 <div class="card mb-3" id="rr-room-card" style="display: none">
   <div class="card-body">
-    <h5 class="card-title mb-2">Rooms</h5>
-    <p class="rr-hint mb-2">Every room on the robot's map. Untick a room to remove its fan from Apple Home, and choose how many passes each room gets. "Default" follows the Passes setting below.</p>
-    <p class="rr-hint mb-2" id="rr-room-auto-off" style="display: none">"Create a fan for every room" is turned off below, so no room fans are created.</p>
+    <h5 class="card-title mb-2" data-t="rooms.title">Rooms</h5>
+    <p class="rr-hint mb-2" data-t="rooms.help">Every room on the robot's map. Untick a room to remove its fan from Apple Home, and choose how many passes each room gets. "Default" follows the Passes setting below.</p>
+    <p class="rr-hint mb-2" id="rr-room-auto-off" style="display: none" data-t="rooms.autoOff">"Create a fan for every room" is turned off below, so no room fans are created.</p>
     <ul class="list-group mb-0" id="rr-room-list"></ul>
   </div>
 </div>
 
 <div class="card mb-3" id="rr-routine-card" style="display: none">
   <div class="card-body">
-    <h5 class="card-title mb-2">Routines</h5>
-    <p class="rr-hint mb-2">The routines you made in the Roborock app. Tick a routine to add a switch for it to Apple Home, untick it to remove the switch. Turning the switch on starts the routine; turning it off sends the robot back to the dock.</p>
+    <h5 class="card-title mb-2" data-t="routines.title">Routines</h5>
+    <p class="rr-hint mb-2" data-t="routines.help">The routines you made in the Roborock app. Tick a routine to add a switch for it to Apple Home, untick it to remove the switch. Turning the switch on starts the routine; turning it off sends the robot back to the dock. A routine started from the Roborock app shows on its switch too.</p>
     <p class="rr-hint mb-2" id="rr-routine-note" style="display: none"></p>
     <ul class="list-group mb-0" id="rr-routine-list"></ul>
   </div>
@@ -58,42 +76,244 @@
 
 <div class="card mb-3" id="rr-programs" style="display: none">
   <div class="card-body">
-    <h5 class="card-title mb-2">Room combinations</h5>
-    <p class="rr-hint mb-2">Each combination is one more fan in Apple Home that cleans the selected rooms together.</p>
+    <h5 class="card-title mb-2" data-t="combos.title">Room combinations</h5>
+    <p class="rr-hint mb-2" data-t="combos.help">Each combination is one more fan in Apple Home that cleans the selected rooms together.</p>
     <ul class="list-group mb-3" id="rr-prog-list"></ul>
     <h6 class="mb-2" id="rr-prog-form-title">New combination</h6>
     <div class="form-group">
-      <label for="rr-prog-name">Fan name</label>
-      <input type="text" class="form-control" id="rr-prog-name" placeholder="e.g. Kitchen and living room" />
-      <p class="rr-hint mt-1 mb-0" id="rr-prog-rename-hint" style="display: none">A different name makes a new fan in Apple Home (its room and automations start over). To only rename it, rename the fan in the Home app.</p>
+      <label for="rr-prog-name" data-t="combos.name">Fan name</label>
+      <input type="text" class="form-control" id="rr-prog-name" dir="auto" data-t-placeholder="combos.namePlaceholder" placeholder="e.g. Kitchen and living room" />
+      <p class="rr-hint mt-1 mb-0" id="rr-prog-rename-hint" style="display: none" data-t="combos.renameHint">A different name makes a new fan in Apple Home (its room and automations start over). To only rename it, rename the fan in the Home app.</p>
     </div>
     <div id="rr-prog-rooms" class="mb-2"></div>
     <div class="form-group">
-      <label for="rr-prog-repeat">Passes</label><br />
+      <label for="rr-prog-repeat" data-t="combos.passes">Passes</label><br />
       <select class="form-control rr-select" id="rr-prog-repeat"></select>
     </div>
     <button type="button" class="btn btn-primary m-0" id="rr-prog-add">Add combination</button>
-    <button type="button" class="btn btn-outline-secondary m-0" id="rr-prog-cancel" style="display: none">Cancel</button>
+    <button type="button" class="btn btn-outline-secondary m-0" id="rr-prog-cancel" style="display: none" data-t="combos.cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- The plugin's settings in Hebrew. In English the regular Homebridge form is shown instead. -->
+<div class="card mb-3" id="rr-form" style="display: none">
+  <div class="card-body">
+    <h5 class="card-title mb-2" data-t="form.title">Settings</h5>
+    <p class="rr-hint mb-3" data-t="form.intro"></p>
+    <div id="rr-form-body"></div>
   </div>
 </div>
 
 <div class="rr-unsaved mb-3" id="rr-unsaved">
-  <strong>Not saved yet.</strong> Press Save at the bottom, then restart Homebridge to apply.
+  <strong data-t="unsaved.title">Not saved yet.</strong> <span data-t="unsaved.text">Press Save at the bottom, then restart Homebridge to apply.</span>
 </div>
 
 <script>
   (async () => {
     const $ = (id) => document.getElementById(id);
 
+    // ---------- language ----------
+
+    // Every text of this page, in English (the default) and Hebrew. The
+    // `language` setting picks one; it is changed with the box at the top.
+    const STR = {
+      en: {
+        "account.title": "Roborock account",
+        "account.loggedInAs": "Logged in as",
+        "account.logout": "Log out",
+        "account.help": "Use the email of your Roborock app account. Roborock will email you a verification code.",
+        "account.email": "Email",
+        "account.sendCode": "Send code",
+        "account.code": "Verification code",
+        "account.login": "Log in",
+        "account.roomsFound": "{n} rooms found on the robot.",
+        "account.restartForRooms": "Restart Homebridge to load the rooms from your robot.",
+        "rooms.title": "Rooms",
+        "rooms.help": "Every room on the robot's map. Untick a room to remove its fan from Apple Home, and choose how many passes each room gets. \"Default\" follows the Passes setting below.",
+        "rooms.autoOff": "\"Create a fan for every room\" is turned off below, so no room fans are created.",
+        "rooms.noFan": "No fan in Apple Home",
+        "rooms.passesFor": "Passes for {room}",
+        "passes.one": "1 pass",
+        "passes.many": "{n} passes",
+        "passes.default": "Default ({n})",
+        "routines.title": "Routines",
+        "routines.help": "The routines you made in the Roborock app. Tick a routine to add a switch for it to Apple Home, untick it to remove the switch. Turning the switch on starts the routine; turning it off sends the robot back to the dock. A routine started from the Roborock app shows on its switch too.",
+        "routines.switch": "Switch: {name}",
+        "routines.noSwitch": "No switch in Apple Home",
+        "routines.scheduled": "also runs on a schedule",
+        "routines.gone": "Not found in the Roborock app any more. Untick to remove it.",
+        "routines.loadError": "Could not load the routines from Roborock ({error}).",
+        "routines.showingSaved": " Showing the last saved list.",
+        "routines.none": "No routines were found. Make one in the Roborock app (Routines), then open these settings again.",
+        "combos.title": "Room combinations",
+        "combos.help": "Each combination is one more fan in Apple Home that cleans the selected rooms together.",
+        "combos.new": "New combination",
+        "combos.edit": "Edit \"{name}\"",
+        "combos.name": "Fan name",
+        "combos.namePlaceholder": "e.g. Kitchen and living room",
+        "combos.renameHint": "A different name makes a new fan in Apple Home (its room and automations start over). To only rename it, rename the fan in the Home app.",
+        "combos.passes": "Passes",
+        "combos.add": "Add combination",
+        "combos.update": "Update combination",
+        "combos.cancel": "Cancel",
+        "combos.none": "No combinations yet.",
+        "combos.allRooms": "all rooms",
+        "combos.editButton": "Edit",
+        "combos.deleteButton": "Delete",
+        "combos.enterName": "Enter a fan name.",
+        "combos.selectRoom": "Select at least one room.",
+        "combos.exists": "A combination with this name already exists.",
+        "combos.added": "Added.",
+        "combos.updated": "Updated.",
+        "combos.pressSave": " Press Save and restart Homebridge.",
+        "unsaved.title": "Not saved yet.",
+        "unsaved.text": "Press Save at the bottom, then restart Homebridge to apply.",
+        "toast.enterEmail": "Enter your Roborock email first.",
+        "toast.checkInbox": "Check your inbox for the Roborock code.",
+        "toast.codeFailed": "Could not send the code",
+        "toast.enterBoth": "Enter your email and the code.",
+        "toast.found": "Found: {robots}. Restart Homebridge to create the room fans.",
+        "toast.loggedIn": "Logged in",
+        "toast.loginFailed": "Login failed",
+        "toast.loggedOut": "Logged out.",
+        "default.fan": "Clean {room}",
+        "form.title": "Settings",
+        "form.intro": "",
+        "form.list": "",
+      },
+      he: {
+        "account.title": "חשבון Roborock",
+        "account.loggedInAs": "מחובר בתור",
+        "account.logout": "התנתק",
+        "account.help": "הזן את כתובת האימייל של חשבון אפליקציית Roborock. Roborock תשלח אליך קוד אימות באימייל.",
+        "account.email": "אימייל",
+        "account.sendCode": "שלח קוד",
+        "account.code": "קוד אימות",
+        "account.login": "התחבר",
+        "account.roomsFound": "נמצאו {n} חדרים במפה של הרובוט.",
+        "account.restartForRooms": "הפעל מחדש את Homebridge כדי לטעון את החדרים מהרובוט.",
+        "rooms.title": "חדרים",
+        "rooms.help": "כל החדרים במפה של הרובוט. הסר את הסימון מחדר כדי להסיר את המאוורר שלו מאפליקציית \"בית\", ובחר כמה מעברים יקבל כל חדר. \"ברירת מחדל\" – לפי ההגדרה \"מעברים\" שלמטה.",
+        "rooms.autoOff": "האפשרות \"צור מאוורר לכל חדר\" כבויה למטה, ולכן לא נוצרים מאווררי חדרים.",
+        "rooms.noFan": "אין מאוורר ב\"בית\"",
+        "rooms.passesFor": "מעברים עבור {room}",
+        "passes.one": "מעבר אחד",
+        "passes.many": "{n} מעברים",
+        "passes.default": "ברירת מחדל ({n})",
+        "routines.title": "תוכניות עבודה",
+        "routines.help": "תוכניות העבודה שיצרת באפליקציית Roborock. סמן תוכנית כדי להוסיף לה מתג ב\"בית\", והסר את הסימון כדי להסיר את המתג. הדלקת המתג מפעילה את התוכנית; כיבוי שלו מחזיר את הרובוט לעמדת הטעינה. גם תוכנית שהופעלה מאפליקציית Roborock מוצגת כדלוקה במתג שלה.",
+        "routines.switch": "מתג: {name}",
+        "routines.noSwitch": "אין מתג ב\"בית\"",
+        "routines.scheduled": "פועלת גם לפי תזמון",
+        "routines.gone": "לא נמצאה עוד באפליקציית Roborock. הסר את הסימון כדי להסיר אותה.",
+        "routines.loadError": "לא ניתן לטעון את תוכניות העבודה מ-Roborock ({error}).",
+        "routines.showingSaved": " מוצגת הרשימה האחרונה שנשמרה.",
+        "routines.none": "לא נמצאו תוכניות עבודה. צור תוכנית באפליקציית Roborock ואז פתח שוב את ההגדרות.",
+        "combos.title": "שילובי חדרים",
+        "combos.help": "כל שילוב הוא מאוורר נוסף ב\"בית\" שמנקה את החדרים שנבחרו יחד.",
+        "combos.new": "שילוב חדש",
+        "combos.edit": "עריכת \"{name}\"",
+        "combos.name": "שם המאוורר",
+        "combos.namePlaceholder": "לדוגמה: מטבח וסלון",
+        "combos.renameHint": "שם אחר יוצר מאוורר חדש ב\"בית\" (השיוך לחדר והאוטומציות שלו מתחילים מחדש). כדי רק לשנות את השם, שנה את שם המאוורר באפליקציית \"בית\".",
+        "combos.passes": "מעברים",
+        "combos.add": "הוסף שילוב",
+        "combos.update": "עדכן שילוב",
+        "combos.cancel": "ביטול",
+        "combos.none": "אין עדיין שילובים.",
+        "combos.allRooms": "כל החדרים",
+        "combos.editButton": "עריכה",
+        "combos.deleteButton": "מחיקה",
+        "combos.enterName": "הזן שם למאוורר.",
+        "combos.selectRoom": "בחר לפחות חדר אחד.",
+        "combos.exists": "כבר קיים שילוב בשם הזה.",
+        "combos.added": "נוסף.",
+        "combos.updated": "עודכן.",
+        "combos.pressSave": " לחץ על שמירה והפעל מחדש את Homebridge.",
+        "unsaved.title": "עדיין לא נשמר.",
+        "unsaved.text": "לחץ על שמירה למטה ואז הפעל מחדש את Homebridge כדי להחיל.",
+        "toast.enterEmail": "הזן קודם את האימייל של חשבון Roborock.",
+        "toast.checkInbox": "הקוד נשלח. בדוק את תיבת הדואר שלך.",
+        "toast.codeFailed": "שליחת הקוד נכשלה",
+        "toast.enterBoth": "הזן את האימייל ואת הקוד.",
+        "toast.found": "נמצאו: {robots}. הפעל מחדש את Homebridge כדי ליצור את מאווררי החדרים.",
+        "toast.loggedIn": "התחברת",
+        "toast.loginFailed": "ההתחברות נכשלה",
+        "toast.loggedOut": "התנתקת.",
+        "default.fan": "ניקוי {room}",
+        "form.title": "הגדרות",
+        "form.intro": "התוסף מוסיף ב\"בית\" מאוורר לכל חדר במפה של הרובוט. הדלקת המאוורר מנקה את החדר, ומהירות המאוורר קובעת את עוצמת השאיבה (25% שקט, 50% מאוזן, 75% טורבו, 100% מקסימום). ברשימת החדרים למעלה בוחרים לאילו חדרים יהיה מאוורר וכמה מעברים יעשה כל אחד; ברירות המחדל נקבעות כאן. מאווררי החדרים אינם משתמשים בתוכניות העבודה של Roborock, ולכן מגבלת 10 התוכניות של האפליקציה לא חלה עליהם. את תוכניות העבודה שכבר יש לך אפשר להוסיף כמתגים מרשימת תוכניות העבודה למעלה.",
+        "form.list": "כמה ערכים מפרידים בפסיק.",
+        "error.2003": "כתובת האימייל אינה תקינה.",
+        "error.2008": "לא קיים חשבון Roborock עם האימייל הזה.",
+        "error.2018": "קוד האימות שגוי או שפג תוקפו.",
+        "error.3006": "צריך לאשר מחדש את הסכם המשתמש באפליקציית Roborock.",
+        "error.3009": "צריך קודם לאשר את הסכם המשתמש באפליקציית Roborock.",
+        "error.3039": "לא קיים חשבון Roborock עם האימייל הזה באזור הזה.",
+        "error.9002": "יותר מדי בקשות לקוד. המתן כמה דקות ונסה שוב.",
+        "error.AUTH": "ההתחברות השמורה ל-Roborock כבר לא בתוקף. התחבר מחדש.",
+        // The settings form: section titles, then [title, description, placeholder] per setting.
+        "section.Room fans": "מאווררי חדרים",
+        "section.Routine switches": "מתגי תוכניות עבודה",
+        "section.Charging sensor and battery": "חיישן טעינה וסוללה",
+        "section.Advanced": "מתקדם",
+        "field.name": ["שם"],
+        "field.email": ["אימייל של חשבון Roborock", "מתמלא אוטומטית כשמתחברים למעלה."],
+        "field.nameTemplate": ["שם המאוורר", "{room} מוחלף בשם החדר מאפליקציית Roborock, לדוגמה \"ניקוי {room}\".", "ניקוי {room}"],
+        "field.autoRooms": ["צור מאוורר לכל חדר"],
+        "field.suction": ["מהירות / עוצמת שאיבה התחלתית", "העוצמה שבה כל מאוורר מתחיל. לאחר מכן כל מאוורר זוכר את המהירות האחרונה שבחרת ב\"בית\"."],
+        "field.enableMaxPlus": ["הוסף את מקסימום+ כמהירות העליונה (רק לרובוטים שיש להם Max+\u200E)", "כשהאפשרות פעילה למאוורר יש 5 דרגות: 20% שקט, 40% מאוזן, 60% טורבו, 80% מקסימום, 100% מקסימום+."],
+        "field.mopMode": ["שאיבה / שטיפה"],
+        "field.repeat": ["מעברים", "ברירת המחדל לכל חדר ולכל שילוב. לחדר או לשילוב אפשר לקבוע מספר משלו ברשימות למעלה."],
+        "field.restoreSettings": ["החזר את הגדרות השאיבה והשטיפה הקודמות בסיום הניקוי", "כך ניקוי שמופעל מאפליקציית Roborock או מ-Siri ממשיך להשתמש בהגדרות הרגילות שלך."],
+        "field.routineNameTemplate": ["שם המתג", "{routine} מוחלף בשם התוכנית מאפליקציית Roborock, לדוגמה \"{routine}\" או \"תוכנית {routine}\"."],
+        "field.followExternal": ["הצג ב\"בית\" גם ניקוי שהופעל מחוץ ל\"בית\"", "כשתוכנית עבודה או ניקוי חדרים מופעלים מאפליקציית Roborock, מתזמון או מתוסף אחר, המתג או המאוורר המתאים נדלק ב\"בית\" ונכבה בסיום הניקוי. הזיהוי נעשה לפי החדרים שהרובוט מנקה."],
+        "field.batteryOnFans": ["הצג את רמת הסוללה ומצב הטעינה בכל מאוורר ומתג", "פתח את ההגדרות של מאוורר או מתג ב\"בית\" כדי לראות את הסוללה של הרובוט והאם הוא בטעינה. כשהאפשרות פעילה אפשר לכבות את חיישן הטעינה הנפרד, אלא אם משתמשים בו באוטומציות."],
+        "field.chargingSensor": ["הוסף חיישן טעינה לכל רובוט", "חיישן מגע: סגור כשהרובוט בעמדת הטעינה (בטעינה או טעון במלואו), פתוח כשהוא מחוץ לעמדה. מציג גם את רמת הסוללה."],
+        "field.chargingSensorName": ["שם חיישן הטעינה", "ברירת המחדל: \"טעינת\" ושם הרובוט, לדוגמה \"טעינת S8\".", "טעינת S8"],
+        "field.statusInterval": ["בדוק את מצב הרובוט כל (שניות)", "כל כמה זמן הרובוט נשאל על מצבו כשהוא בעמדת הטעינה. מחוץ לעמדה הוא נשאל כל 30 שניות, ושינויים שהרובוט מדווח עליהם בעצמו (יציאה מהעמדה, רמת סוללה) מופיעים מיד."],
+        "field.robotIp": ["כתובת IP של הרובוט (לא חובה)", "בדרך כלל נמצאת אוטומטית. הפקודות נשלחות ישירות לרובוט ברשת הביתית, והענן של Roborock משמש כגיבוי."],
+        "field.skipDevices": ["רובוטים להתעלם מהם (שם או מזהה מכשיר)"],
+        "option.quiet": "שקט (25%)",
+        "option.balanced": "מאוזן (50%)",
+        "option.turbo": "טורבו (75%)",
+        "option.max": "מקסימום (100%)",
+        "option.max_plus": "מקסימום+ (דורש את האפשרות שלמטה)",
+        "option.vacuum_only": "שאיבה בלבד",
+        "option.unchanged": "ללא שינוי (לפי ההגדרה הנוכחית של הרובוט)",
+      },
+    };
+
+    let lang = "en";
+
+    /** A text in the chosen language (English when it has no translation), with {placeholders} filled in. */
+    function t(key, vars) {
+      let text = STR[lang][key];
+      if (text === undefined) text = STR.en[key];
+      if (typeof text !== "string") return text;
+      return text.replace(/\{(\w+)\}/g, (all, name) => (vars && name in vars ? vars[name] : all));
+    }
+
+    /** Put the chosen language on the fixed parts of the page. */
+    function applyLanguage() {
+      document.documentElement.setAttribute("dir", lang === "he" ? "rtl" : "ltr");
+      document.documentElement.setAttribute("lang", lang);
+      $("rr-lang").value = lang;
+      document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
+      document.querySelectorAll("[data-t-placeholder]").forEach((el) => (el.placeholder = t(el.dataset.tPlaceholder)));
+    }
+
     let roomNames = [];
     let routines = []; // [{ id, name, scheduled, robot }] from the Roborock app
     let routineRobots = 0;
     let routineError = "";
     let editIndex = null; // index of the combination being edited, or null
+    let loggedIn = false;
+    let schema = null; // config.schema.json, for the Hebrew settings form
 
-    function esc(t) {
+    function esc(text) {
       const d = document.createElement("div");
-      d.textContent = t;
+      d.textContent = text;
       return d.innerHTML;
     }
 
@@ -105,13 +325,13 @@
     }
 
     function passesText(n) {
-      return n === 1 ? "1 pass" : n + " passes";
+      return n === 1 ? t("passes.one") : t("passes.many", { n });
     }
 
     /** Fill a passes <select>: "" = use the default from the settings below. */
     function fillPasses(select, defaultRepeat, value) {
       select.innerHTML = "";
-      const options = [["", "Default (" + defaultRepeat + ")"], ["1", passesText(1)], ["2", passesText(2)], ["3", passesText(3)]];
+      const options = [["", t("passes.default", { n: defaultRepeat })], ["1", passesText(1)], ["2", passesText(2)], ["3", passesText(3)]];
       for (const [v, text] of options) {
         const o = document.createElement("option");
         o.value = v;
@@ -123,7 +343,7 @@
 
     /** Same naming rule as the plugin: the room name is always part of the fan name. */
     function fanName(block, room) {
-      let template = String(block.nameTemplate || "Clean {room}").trim();
+      let template = String(block.nameTemplate || STR[block.language === "he" ? "he" : "en"]["default.fan"]).trim();
       if (!/\{room\}/i.test(template)) template = template ? template + " {room}" : "{room}";
       return template.replace(/\{room\}/gi, room).trim();
     }
@@ -216,7 +436,7 @@
         const label = document.createElement("label");
         label.className = "form-check-label";
         label.htmlFor = box.id;
-        label.innerHTML = "<strong><bdi>" + esc(room) + "</bdi></strong><br><span class=\"rr-hint\"><bdi>" + esc(on ? fanName(block, room) : "No fan in Apple Home") + "</bdi></span>";
+        label.innerHTML = "<strong><bdi>" + esc(room) + "</bdi></strong><br><span class=\"rr-hint\"><bdi>" + esc(on ? fanName(block, room) : t("rooms.noFan")) + "</bdi></span>";
         if (!on) label.classList.add("rr-off");
         main.appendChild(box);
         main.appendChild(label);
@@ -226,7 +446,7 @@
         const select = document.createElement("select");
         select.className = "form-control form-control-sm rr-select";
         select.id = "rr-passes-" + i;
-        select.setAttribute("aria-label", "Passes for " + room);
+        select.setAttribute("aria-label", t("rooms.passesFor", { room }));
         fillPasses(select, defaultRepeat, own.repeat);
         select.disabled = !on;
         select.addEventListener("change", () => {
@@ -318,21 +538,21 @@
       list.innerHTML = "";
       routines.forEach((routine, i) => {
         const on = ticked.has(routine);
-        const parts = [on ? "Switch: <bdi>" + esc(switchName(block, routine.name)) + "</bdi>" : "No switch in Apple Home"];
+        const parts = [on ? esc(t("routines.switch", { name: "\u0001" })).replace("\u0001", () => "<bdi>" + esc(switchName(block, routine.name)) + "</bdi>") : esc(t("routines.noSwitch"))];
         if (routineRobots > 1) parts.push("<bdi>" + esc(routine.robot) + "</bdi>");
-        if (routine.scheduled) parts.push("also runs on a schedule");
+        if (routine.scheduled) parts.push(esc(t("routines.scheduled")));
         list.appendChild(routineRow(i, on, routine.name, parts.join(" · "), !on, (checked) => serial(() => setRoutineSwitch(routine, checked))));
       });
       missing.forEach((entry, i) => {
-        const row = routineRow("gone-" + i, true, entry.name || entry.id, "Not found in the Roborock app any more. Untick to remove it.", true, (checked) => {
+        const row = routineRow("gone-" + i, true, entry.name || entry.id, esc(t("routines.gone")), true, (checked) => {
           if (!checked) serial(() => dropRoutineEntry(entry));
         });
         list.appendChild(row);
       });
       const note = $("rr-routine-note");
       let text = "";
-      if (routineError) text = "Could not load the routines from Roborock (" + routineError + ")." + (routines.length ? " Showing the last saved list." : "");
-      else if (!routines.length && !missing.length) text = "No routines were found. Make one in the Roborock app (Routines), then open these settings again.";
+      if (routineError) text = t("routines.loadError", { error: routineError }) + (routines.length ? t("routines.showingSaved") : "");
+      else if (!routines.length && !missing.length) text = t("routines.none");
       note.textContent = text;
       note.style.display = text ? "block" : "none";
     }
@@ -342,7 +562,7 @@
         await renderRooms();
         await renderPrograms();
       }
-      await renderRoutines();
+      if (loggedIn) await renderRoutines();
     }
 
     // ---------- combinations ----------
@@ -352,8 +572,8 @@
       $("rr-prog-name").value = "";
       document.querySelectorAll("#rr-prog-rooms input").forEach((c) => (c.checked = false));
       fillPasses($("rr-prog-repeat"), clampRepeat((block && block.repeat) ?? 2), "");
-      $("rr-prog-form-title").textContent = "New combination";
-      $("rr-prog-add").textContent = "Add combination";
+      $("rr-prog-form-title").textContent = t("combos.new");
+      $("rr-prog-add").textContent = t("combos.add");
       $("rr-prog-cancel").style.display = "none";
       $("rr-prog-rename-hint").style.display = "none";
     }
@@ -366,8 +586,8 @@
       const wanted = new Set((p.rooms || []).map(norm));
       document.querySelectorAll("#rr-prog-rooms input").forEach((c) => (c.checked = wanted.has(norm(c.value))));
       fillPasses($("rr-prog-repeat"), clampRepeat(block.repeat ?? 2), p.repeat);
-      $("rr-prog-form-title").textContent = "Edit \"" + (p.name || "") + "\"";
-      $("rr-prog-add").textContent = "Update combination";
+      $("rr-prog-form-title").textContent = t("combos.edit", { name: p.name || "" });
+      $("rr-prog-add").textContent = t("combos.update");
       $("rr-prog-cancel").style.display = "inline-block";
       $("rr-prog-rename-hint").style.display = "block";
       $("rr-prog-form-title").scrollIntoView({ block: "nearest" });
@@ -380,7 +600,7 @@
       const list = $("rr-prog-list");
       list.innerHTML = "";
       if (!programs.length) {
-        list.innerHTML = '<li class="list-group-item rr-hint">No combinations yet.</li>';
+        list.innerHTML = '<li class="list-group-item rr-hint">' + esc(t("combos.none")) + "</li>";
       }
       programs.forEach((p, i) => {
         const li = document.createElement("li");
@@ -389,13 +609,13 @@
         const main = document.createElement("span");
         main.className = "rr-main";
         // <bdi> keeps right-to-left room names from reordering the text around them.
-        main.innerHTML = "<strong><bdi>" + esc(p.name || "") + "</bdi></strong><br><span class=\"rr-hint\"><bdi>" + esc((p.rooms || []).join(", ") || "all rooms") + "</bdi> · <bdi class=\"rr-nowrap\">" + esc(passes) + "</bdi></span>";
+        main.innerHTML = "<strong><bdi>" + esc(p.name || "") + "</bdi></strong><br><span class=\"rr-hint\"><bdi>" + esc((p.rooms || []).join(", ") || t("combos.allRooms")) + "</bdi> · <bdi class=\"rr-nowrap\">" + esc(passes) + "</bdi></span>";
         const side = document.createElement("span");
         side.className = "rr-side";
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "btn btn-outline-primary btn-sm m-0";
-        edit.textContent = "Edit";
+        edit.textContent = t("combos.editButton");
         edit.addEventListener("click", async () => {
           const fresh = await loadConfig();
           editProgram(fresh.block, i);
@@ -403,7 +623,7 @@
         const del = document.createElement("button");
         del.type = "button";
         del.className = "btn btn-outline-danger btn-sm m-0";
-        del.textContent = "Delete";
+        del.textContent = t("combos.deleteButton");
         del.addEventListener("click", () => serial(async () => {
           const fresh = await loadConfig();
           if (!fresh.block.programs || !fresh.block.programs[i]) return;
@@ -422,7 +642,7 @@
         box.dataset.filled = "1";
         box.innerHTML = roomNames.map((r, i) =>
           '<div class="form-check"><input class="form-check-input" type="checkbox" id="rr-room-' + i + '" value="' + esc(r).replace(/"/g, "&quot;") + '">' +
-          '<label class="form-check-label" for="rr-room-' + i + '">' + esc(r) + "</label></div>").join("");
+          '<label class="form-check-label" for="rr-room-' + i + '"><bdi>' + esc(r) + "</bdi></label></div>").join("");
         resetProgramForm(block);
       } else if (editIndex === null) {
         // Keep the "Default (n passes)" label in step with the setting below.
@@ -434,13 +654,13 @@
       const name = $("rr-prog-name").value.trim();
       const rooms = [...document.querySelectorAll("#rr-prog-rooms input:checked")].map((c) => c.value);
       const repeat = $("rr-prog-repeat").value;
-      if (!name) return homebridge.toast.warning("Enter a fan name.");
-      if (!rooms.length) return homebridge.toast.warning("Select at least one room.");
+      if (!name) return homebridge.toast.warning(t("combos.enterName"));
+      if (!rooms.length) return homebridge.toast.warning(t("combos.selectRoom"));
       const { cfg, block } = await loadConfig();
       block.programs = block.programs || [];
       const editing = editIndex !== null && block.programs[editIndex] ? block.programs[editIndex] : null;
       if (block.programs.some((p) => p !== editing && norm(p && p.name) === norm(name))) {
-        return homebridge.toast.warning("A combination with this name already exists.");
+        return homebridge.toast.warning(t("combos.exists"));
       }
       const target = editing || {};
       target.name = name;
@@ -450,7 +670,7 @@
       if (!editing) block.programs.push(target);
       await commit(cfg);
       resetProgramForm(block);
-      homebridge.toast.success((editing ? "Updated." : "Added.") + " Press Save and restart Homebridge.");
+      homebridge.toast.success((editing ? t("combos.updated") : t("combos.added")) + t("combos.pressSave"));
     }));
 
     $("rr-prog-cancel").addEventListener("click", async () => {
@@ -458,10 +678,199 @@
       resetProgramForm(block);
     });
 
+    // ---------- settings form in Hebrew ----------
+
+    // In English the regular Homebridge form (made from config.schema.json) is
+    // shown under this page. That form cannot be translated, so in Hebrew it is
+    // hidden and the same settings are drawn here, from the same schema: a new
+    // setting shows up by itself, in English until it gets a Hebrew text above.
+
+    function fieldText(key, index, fallback) {
+      const texts = STR[lang]["field." + key];
+      return (Array.isArray(texts) && texts[index]) || fallback || "";
+    }
+
+    async function setField(key, value) {
+      const { cfg, block } = await loadConfig();
+      block[key] = value; // undefined: the setting is removed and its default applies
+      await commit(cfg);
+    }
+
+    function hint(text) {
+      const p = document.createElement("p");
+      p.className = "rr-hint";
+      p.textContent = text;
+      return p;
+    }
+
+    function fieldNode(key, prop, block) {
+      const id = "rr-f-" + key;
+      const title = fieldText(key, 0, prop.title || key);
+      const description = fieldText(key, 1, prop.description);
+      const stored = block[key] === undefined || block[key] === null ? prop.default : block[key];
+      const wrap = document.createElement("div");
+      const label = document.createElement("label");
+      label.htmlFor = id;
+      label.textContent = title;
+
+      if (prop.type === "boolean") {
+        wrap.className = "form-check rr-field";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.className = "form-check-input";
+        box.id = id;
+        box.checked = stored === true;
+        box.addEventListener("change", () => {
+          const checked = box.checked;
+          serial(() => setField(key, checked));
+        });
+        label.className = "form-check-label";
+        wrap.appendChild(box);
+        wrap.appendChild(label);
+        if (description) wrap.appendChild(hint(description));
+        return wrap;
+      }
+
+      wrap.className = "rr-field";
+      wrap.appendChild(label);
+      let input;
+      if (Array.isArray(prop.oneOf)) {
+        input = document.createElement("select");
+        input.className = "form-control";
+        for (const choice of prop.oneOf) {
+          const value = choice.enum && choice.enum[0];
+          const o = document.createElement("option");
+          o.value = value;
+          o.textContent = t("option." + value) || choice.title || value;
+          input.appendChild(o);
+        }
+        input.value = stored == null ? "" : String(stored);
+        input.addEventListener("change", () => {
+          const value = input.value;
+          serial(() => setField(key, value));
+        });
+      } else {
+        input = document.createElement("input");
+        input.className = "form-control";
+        const numeric = prop.type === "integer" || prop.type === "number";
+        const list = prop.type === "array";
+        if (numeric) {
+          input.type = "number";
+          input.inputMode = "numeric";
+          if (prop.minimum != null) input.min = prop.minimum;
+          if (prop.maximum != null) input.max = prop.maximum;
+          input.value = stored == null ? "" : stored;
+        } else {
+          input.type = "text";
+          input.dir = key === "email" || prop.format === "ipv4" ? "ltr" : "auto";
+          // Only what was typed is shown as the value; a default shows as the grey example text.
+          const typed = block[key];
+          input.value = list ? (Array.isArray(typed) ? typed : []).join(", ") : typed == null ? "" : typed;
+          const placeholder = fieldText(key, 2, prop.placeholder || prop.default);
+          if (placeholder) input.placeholder = placeholder;
+        }
+        const read = () => {
+          const text = input.value.trim();
+          if (list) return text.split(",").map((s) => s.trim()).filter(Boolean);
+          if (!text) return prop.required ? (block[key] == null ? prop.default : block[key]) : undefined;
+          if (!numeric) return text;
+          let n = Math.round(Number(text));
+          if (!Number.isFinite(n)) return undefined;
+          if (prop.minimum != null) n = Math.max(prop.minimum, n);
+          if (prop.maximum != null) n = Math.min(prop.maximum, n);
+          return n;
+        };
+        // Saved while typing (after a short pause), so nothing is lost when
+        // Save is pressed straight from the keyboard.
+        let timer = null;
+        const push = () => {
+          clearTimeout(timer);
+          timer = null;
+          const value = read();
+          serial(() => setField(key, value));
+        };
+        input.addEventListener("input", () => {
+          clearTimeout(timer);
+          timer = setTimeout(push, 300);
+        });
+        input.addEventListener("change", () => {
+          if (timer) push();
+          // Show the number as it was stored (kept inside its limits).
+          if (numeric && input.value.trim()) {
+            const value = read();
+            if (value !== undefined) input.value = value;
+          }
+        });
+      }
+      input.id = id;
+      wrap.appendChild(input);
+      const note = [description, prop.type === "array" ? t("form.list") : ""].filter(Boolean).join(" ");
+      if (note) wrap.appendChild(hint(note));
+      return wrap;
+    }
+
+    function layoutNode(item, props, block) {
+      if (typeof item === "string") {
+        return props[item] ? fieldNode(item, props[item], block) : document.createDocumentFragment();
+      }
+      if (item && item.type === "fieldset") {
+        const box = document.createElement(item.expandable ? "details" : "div");
+        box.className = "rr-section";
+        const head = document.createElement(item.expandable ? "summary" : "h6");
+        head.textContent = t("section." + item.title) || item.title || "";
+        box.appendChild(head);
+        for (const sub of item.items || []) box.appendChild(layoutNode(sub, props, block));
+        return box;
+      }
+      if (item && item.key && props[item.key]) return fieldNode(item.key, props[item.key], block);
+      return document.createDocumentFragment();
+    }
+
+    /** Hebrew: draw the settings here and hide the regular form. English: show the regular form. */
+    async function showSettingsForm() {
+      if (lang === "he" && !schema) {
+        // Asked for only when needed, and never waited for longer than a few seconds.
+        try {
+          schema = await Promise.race([homebridge.getPluginConfigSchema(), new Promise((resolve) => setTimeout(() => resolve(null), 4000))]);
+        } catch (e) {
+          schema = null; // the regular form is used instead
+        }
+      }
+      const props = schema && schema.schema && schema.schema.properties;
+      if (lang !== "he" || !props || !Array.isArray(schema.layout)) {
+        $("rr-form").style.display = "none";
+        homebridge.showSchemaForm();
+        return;
+      }
+      const { block } = await loadConfig();
+      const body = $("rr-form-body");
+      body.innerHTML = "";
+      for (const item of schema.layout) body.appendChild(layoutNode(item, props, block));
+      homebridge.hideSchemaForm();
+      $("rr-form").style.display = "block";
+    }
+
+    $("rr-lang").addEventListener("change", () => {
+      const chosen = $("rr-lang").value === "he" ? "he" : "en";
+      serial(async () => {
+        await setField("language", chosen);
+        lang = chosen;
+        applyLanguage();
+        resetProgramForm((await loadConfig()).block);
+        showAccountLine();
+        await showSettingsForm();
+      });
+    });
+
     // ---------- account ----------
+
+    function showAccountLine() {
+      $("rr-rooms").textContent = roomNames.length ? t("account.roomsFound", { n: roomNames.length }) : t("account.restartForRooms");
+    }
 
     async function refresh() {
       const status = await homebridge.request("/status");
+      loggedIn = !!status.loggedIn;
       const seen = new Set();
       roomNames = (status.rooms || []).filter((r) => norm(r) && !seen.has(norm(r)) && seen.add(norm(r)));
       const showRooms = status.loggedIn && roomNames.length;
@@ -490,9 +899,7 @@
       $("rr-logged-out").style.display = status.loggedIn ? "none" : "block";
       if (status.loggedIn) {
         $("rr-email-shown").textContent = status.email;
-        $("rr-rooms").textContent = roomNames.length
-          ? roomNames.length + " rooms found on the robot."
-          : "Restart Homebridge to load the rooms from your robot.";
+        showAccountLine();
       } else {
         const config = await homebridge.getPluginConfig();
         if (config[0] && config[0].email) $("rr-email").value = config[0].email;
@@ -509,20 +916,23 @@
       }
     }
 
+    /** What went wrong, in the chosen language when Roborock gave a known reason. */
     function errorText(e) {
-      return (e && (e.message || (e.error && e.error.message))) || String(e);
+      const code = e && e.error && e.error.code;
+      const known = code != null && STR[lang]["error." + code];
+      return known || (e && (e.message || (e.error && e.error.message))) || String(e);
     }
 
     $("rr-send").addEventListener("click", async () => {
       const email = $("rr-email").value.trim();
-      if (!email) return homebridge.toast.warning("Enter your Roborock email first.");
+      if (!email) return homebridge.toast.warning(t("toast.enterEmail"));
       homebridge.showSpinner();
       try {
         await homebridge.request("/send-code", { email });
-        homebridge.toast.success("Check your inbox for the Roborock code.");
+        homebridge.toast.success(t("toast.checkInbox"));
         $("rr-code").focus();
       } catch (e) {
-        homebridge.toast.error(errorText(e), "Could not send the code");
+        homebridge.toast.error(errorText(e), t("toast.codeFailed"));
       } finally {
         homebridge.hideSpinner();
       }
@@ -531,20 +941,18 @@
     $("rr-do-login").addEventListener("click", async () => {
       const email = $("rr-email").value.trim();
       const code = $("rr-code").value.trim();
-      if (!email || !code) return homebridge.toast.warning("Enter your email and the code.");
+      if (!email || !code) return homebridge.toast.warning(t("toast.enterBoth"));
       homebridge.showSpinner();
       try {
         const res = await homebridge.request("/login", { email, code });
         await rememberEmail(email);
         await homebridge.savePluginConfig();
         $("rr-unsaved").style.display = "none";
-        homebridge.toast.success(
-          "Found: " + (res.robots || []).join(", ") + ". Restart Homebridge to create the room fans.",
-          "Logged in"
-        );
+        homebridge.toast.success(t("toast.found", { robots: (res.robots || []).join(", ") }), t("toast.loggedIn"));
         await refresh();
+        await showSettingsForm();
       } catch (e) {
-        homebridge.toast.error(errorText(e), "Login failed");
+        homebridge.toast.error(errorText(e), t("toast.loginFailed"));
       } finally {
         homebridge.hideSpinner();
       }
@@ -552,7 +960,7 @@
 
     $("rr-logout").addEventListener("click", async () => {
       await homebridge.request("/logout");
-      homebridge.toast.info("Logged out.");
+      homebridge.toast.info(t("toast.loggedOut"));
       await refresh();
     });
 
@@ -563,7 +971,9 @@
       await renderAll();
     });
 
+    lang = (await loadConfig()).block.language === "he" ? "he" : "en";
+    applyLanguage();
     await refresh();
-    homebridge.showSchemaForm();
+    await showSettingsForm();
   })();
 </script>

@@ -99,7 +99,8 @@ class UiServer extends HomebridgePluginUiServer {
       await this.login.sendCode();
       return { ok: true };
     } catch (err) {
-      throw new RequestError(err.message, { message: err.message });
+      // The code lets the settings page show the reason in the chosen language.
+      throw new RequestError(err.message, { message: err.message, code: err.code });
     }
   }
 
@@ -118,7 +119,8 @@ class UiServer extends HomebridgePluginUiServer {
       const robots = [...(home.devices || []), ...(home.receivedDevices || [])].map((d) => d.name);
       return { ok: true, robots, rooms: (home.rooms || []).map((r) => r.name) };
     } catch (err) {
-      throw new RequestError(err.message, { message: err.message });
+      // The code lets the settings page show the reason in the chosen language.
+      throw new RequestError(err.message, { message: err.message, code: err.code });
     }
   }
 

@@ -3,7 +3,7 @@
   "pluginType": "platform",
   "singular": true,
   "customUi": true,
-  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. The room fans use no Roborock routines, so the app's 10-routine limit does not apply. The routines you do have in the Roborock app can be added as switches from the Routines list above.",
+  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. The room fans use no Roborock routines, so the app's 10-routine limit does not apply. The routines you do have in the Roborock app can be added as switches from the Routines list above. A routine or room clean started from the Roborock app shows on its switch or fan too.",
   "schema": {
     "type": "object",
     "properties": {
@@ -13,6 +13,26 @@
         "default": "Roborock Room Clean",
         "required": true
       },
+      "language": {
+        "title": "Language / שפה",
+        "type": "string",
+        "default": "en",
+        "oneOf": [
+          {
+            "title": "English",
+            "enum": [
+              "en"
+            ]
+          },
+          {
+            "title": "עברית",
+            "enum": [
+              "he"
+            ]
+          }
+        ],
+        "description": "Language of the plugin settings and of the names the plugin makes up itself. Changed with the Language box at the top of the plugin settings."
+      },
       "email": {
         "title": "Roborock account email",
         "type": "string",
@@ -21,9 +41,8 @@
       "nameTemplate": {
         "title": "Fan name",
         "type": "string",
-        "default": "Clean {room}",
         "placeholder": "Clean {room}",
-        "description": "{room} is replaced by the room name from the Roborock app, e.g. \"Clean {room}\" or \"ניקוי {room}\"."
+        "description": "{room} is replaced by the room name from the Roborock app, e.g. \"Clean {room}\" or \"ניקוי {room}\". Empty: \"Clean {room}\" (\"ניקוי {room}\" in Hebrew)."
       },
       "autoRooms": {
         "title": "Create a fan for every room",
@@ -241,6 +260,12 @@
         "placeholder": "{routine}",
         "description": "{routine} is replaced by the routine name from the Roborock app, e.g. \"{routine}\" or \"תוכנית {routine}\"."
       },
+      "followExternal": {
+        "title": "Show cleans started outside Apple Home",
+        "type": "boolean",
+        "default": true,
+        "description": "When a routine or a room clean is started from the Roborock app, a schedule or another plugin, the matching switch or fan turns on in Apple Home and turns off when the clean ends. It is recognised by the rooms the robot is cleaning."
+      },
       "skipDevices": {
         "title": "Robots to ignore (name or device id)",
         "type": "array",
@@ -309,7 +334,8 @@
       "title": "Routine switches",
       "expandable": true,
       "items": [
-        "routineNameTemplate"
+        "routineNameTemplate",
+        "followExternal"
       ]
     },
     {

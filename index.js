@@ -65,7 +65,11 @@ class RoborockRoomCleanPlatform {
     this.session = null;
     this.stopped = false;
     this.text = TEXT[this.config.language] || TEXT.en;
-    this.externalRetryMs = 8000; // wait between attempts to read which rooms an outside clean covers
+    // Waits before each attempt to read which rooms an outside clean covers. The
+    // robot sends the map to one viewer at a time: while the Roborock app is
+    // open on its map it does not answer us, so the attempts go on for a few
+    // minutes, until the app is closed or the phone is locked.
+    this.externalWaits = [0, 8000, 8000, 15000, 15000, 30000, 30000, 60000, 60000, 60000];
     this.dockRetryMs = 4000; // wait before asking a robot that refused to go to the dock again
     this.ready = false; // true once every fan and switch exists
 
@@ -810,8 +814,8 @@ class RoborockRoomCleanPlatform {
     if (match) {
       what = "the whole home";
     } else if (status.in_cleaning !== 2) {
-      // A room clean (3) gets three tries: the map is sometimes a little behind.
-      const tries = status.in_cleaning === 1 ? 1 : 3;
+      // A room clean (3) is asked about again and again for a few minutes (see externalWaits).
+      const tries = status.in_cleaning === 1 ? 1 : this.externalWaits.length;
       let rooms = null;
       const reasons = []; // what each try came to, for the log when none worked
       // The map travels through the cloud: it is left alone while the cloud is
@@ -825,7 +829,10 @@ class RoborockRoomCleanPlatform {
         reasons.push("not asked, the Roborock cloud is not answering right now");
       }
       for (let attempt = 1; asked && attempt <= tries && !rooms; attempt++) {
-        if (attempt > 1) await sleep(this.externalRetryMs);
+        if (attempt === 4) {
+          this.log.info(`${robot.name}: the robot is not sending its map yet (it does not while the Roborock app is open on the map); trying again for a few minutes.`);
+        }
+        if (this.externalWaits[attempt - 1]) await sleep(this.externalWaits[attempt - 1]);
         if (!current()) return dropped();
         try {
           const answer = await channel.getCleaning(8000, attempt);
@@ -851,7 +858,7 @@ class RoborockRoomCleanPlatform {
         if (asked) monitor.noMapUntil = Date.now() + NO_MAP_PAUSE_MS;
         this.log.info(
           `${robot.name}: a clean was started outside Apple Home, but the robot did not report which rooms, so no switch is shown as on. ` +
-            `Tries: ${reasons.map((r, i) => `${i + 1}) ${r}`).join("; ")}. ` +
+            `Tries: ${summarise(reasons)}. ` +
             `Status: in_cleaning=${status.in_cleaning}, state=${status.state}${status.cleaning_info ? `, cleaning_info=${JSON.stringify(status.cleaning_info)}` : ""}.`
         );
         return;
@@ -1211,6 +1218,17 @@ class RoborockRoomCleanPlatform {
       this.log.debug(`${program.name}: restoring previous settings failed: ${err.message}`);
     }
   }
+}
+
+/** "3x no answer; 1x the map marks no rooms": the same outcome in a row is counted, not repeated. */
+function summarise(reasons) {
+  const groups = [];
+  for (const reason of reasons) {
+    const last = groups[groups.length - 1];
+    if (last && last.reason === reason) last.count++;
+    else groups.push({ reason, count: 1 });
+  }
+  return groups.map((g) => `${g.count}x ${g.reason}`).join("; ");
 }
 
 function clampRepeat(n) {

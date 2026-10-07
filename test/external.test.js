@@ -40,7 +40,7 @@ async function startPlatform(config, robot, routines = []) {
     info: (m) => logs.push(m), warn: (m) => logs.push(m), error: (m) => logs.push("ERR " + m), debug: (m) => logs.push("DBG " + m),
   });
   const platform = new api.Platform(log, config, api);
-  platform.externalRetryMs = 300;
+  platform.externalWaits = [0, 300, 300];
   platform.dockRetryMs = 150;
   await platform.start();
   const byName = (name) => [...platform.programs.values()].find((p) => p.name === name);
@@ -241,7 +241,7 @@ test("outside cleans: nothing matches, the robot sends no map, or the option is 
   const failure = run.logs.find((l) => l.includes("did not report which rooms"));
   assert.ok(failure, run.logs.join("\n"));
   // The log says what each try came to, asked both ways, and what the robot's status was.
-  assert.match(failure, /Tries: 1\) the robot said ok but sent no map \(own endpoint\); 2\) the robot said ok but sent no map \(account endpoint\); 3\) .*own endpoint/);
+  assert.match(failure, /Tries: 1x the robot said ok but sent no map \(own endpoint\); 1x the robot said ok but sent no map \(account endpoint\); 1x .*own endpoint/);
   assert.match(failure, /Status: in_cleaning=3, state=18\./);
   assert.equal(channel.cloudTimeouts, 0, "a missing map does not slow the other requests down");
   // The next step of the same routine (idle in between) does not ask again for a while.
@@ -472,6 +472,24 @@ test("stopping: a robot that refuses to go to the dock for a moment is asked aga
   await wait(2800);
   assert.equal(run.robotLog.filter((r) => r.method === "app_charge").length, 3);
   assert.equal(run.logs.filter((l) => l.startsWith("ERR") && l.includes("action locked")).length, 1, run.logs.join("\n"));
+  run.stop();
+});
+
+test("the map comes only after a while (the Roborock app was open): the tries go on until it does", async () => {
+  // No map at first, as while the Roborock app is showing its own.
+  const robot = { status: { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [17], answersMap: () => false };
+  const run = await startPlatform({}, robot);
+  run.platform.externalWaits = [0, 200, 200, 200, 200, 200, 200, 200];
+  const channel = run.platform.monitors.get(DUID).channel;
+  const original = channel.getMap.bind(channel);
+  channel.getMap = (ms, attempt) => original(150, attempt);
+  await wait(3600); // four tries have failed by now
+  assert.equal(run.byName("Clean מטבח").running, false);
+  assert.ok(run.logs.some((l) => l.includes("the robot is not sending its map yet")), run.logs.join("\n"));
+  robot.answersMap = null; // the app is closed
+  await wait(900);
+  assert.equal(run.byName("Clean מטבח").running, true, run.logs.join("\n"));
+  assert.ok(!run.logs.some((l) => l.includes("did not report which rooms")));
   run.stop();
 });
 

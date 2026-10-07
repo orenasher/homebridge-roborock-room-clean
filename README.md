@@ -73,7 +73,8 @@ The robot does not say which routine it is running, so the plugin reads from the
 - A whole-home clean shows on a routine that cleans the whole home. Zone cleans are not shown.
 - The rooms of each routine are read when Homebridge starts: restart Homebridge after changing a routine in the Roborock app.
 - While such a clean shows as on, turning that switch or fan off in Apple Home (also from a scene that turns everything off) stops the robot, and automations that react to the switch or fan turning on will run.
-- The map is read through the Roborock cloud, normally once per clean (up to three tries when the robot is slow to mark the rooms; if it marks none, the plugin stops asking for ten minutes).
+- The robot sends its map to one viewer at a time. While the Roborock app is open on the map screen it does not answer the plugin, so a room clean started from the app shows in Apple Home once the app is closed or the phone is locked. The plugin keeps asking for about five minutes (ten requests at most), then leaves that clean alone.
+- The map is read through the Roborock cloud, normally with a single request per clean.
 - Turn the feature off with `followExternal: false` ("Show cleans started outside Apple Home" under Routine switches).
 
 ## Language (English / עברית)

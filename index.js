@@ -66,6 +66,7 @@ class RoborockRoomCleanPlatform {
     this.stopped = false;
     this.text = TEXT[this.config.language] || TEXT.en;
     this.externalRetryMs = 8000; // wait between attempts to read which rooms an outside clean covers
+    this.dockRetryMs = 4000; // wait before asking a robot that refused to go to the dock again
     this.ready = false; // true once every fan and switch exists
 
     api.on("didFinishLaunching", () => {
@@ -780,10 +781,10 @@ class RoborockRoomCleanPlatform {
     const job = { ours: this.busy(duid) || Date.now() < monitor.quietUntil };
     monitor.job = job;
     if (job.ours || this.config.followExternal === false) return;
-    // The map travels through the cloud: leave it alone while the cloud is not answering.
-    if (Date.now() < monitor.noMapUntil || Date.now() < monitor.channel.cloudPausedUntil) return;
+    // Every step from here on is written to the log, so it can be followed afterwards.
+    this.log.info(`${monitor.robot.name}: a clean was started outside Apple Home (in_cleaning=${status.in_cleaning}, state=${status.state}); finding out what it is.`);
     this.identifyExternal(monitor, job, status).catch((err) => {
-      this.log.debug(`${monitor.robot.name}: could not work out what was started outside Apple Home: ${err.message}`);
+      this.log.warn(`${monitor.robot.name}: could not work out what was started outside Apple Home: ${err.message}`);
     });
   }
 
@@ -798,6 +799,9 @@ class RoborockRoomCleanPlatform {
     if (!programs().length) return;
     // Give up as soon as the clean ended or a fan/switch was used in Home meanwhile.
     const current = () => !this.stopped && monitor.job === job && !this.busy(robot.duid) && Date.now() >= monitor.quietUntil;
+    const dropped = () => {
+      if (!this.stopped) this.log.info(`${robot.name}: stopped looking into the clean started outside Apple Home: it ended, or a fan or switch was used in Home meanwhile.`);
+    };
     let candidates = programs();
     let match = null;
     let what = "a zone";
@@ -810,9 +814,19 @@ class RoborockRoomCleanPlatform {
       const tries = status.in_cleaning === 1 ? 1 : 3;
       let rooms = null;
       const reasons = []; // what each try came to, for the log when none worked
-      for (let attempt = 1; attempt <= tries && !rooms; attempt++) {
+      // The map travels through the cloud: it is left alone while the cloud is
+      // not answering, and for a while after the robot sent none.
+      let asked = true;
+      if (Date.now() < monitor.noMapUntil) {
+        asked = false;
+        reasons.push("not asked, the robot sent no map a few minutes ago");
+      } else if (Date.now() < channel.cloudPausedUntil) {
+        asked = false;
+        reasons.push("not asked, the Roborock cloud is not answering right now");
+      }
+      for (let attempt = 1; asked && attempt <= tries && !rooms; attempt++) {
         if (attempt > 1) await sleep(this.externalRetryMs);
-        if (!current()) return;
+        if (!current()) return dropped();
         try {
           const answer = await channel.getCleaning(8000, attempt);
           if (answer.rooms.length) rooms = answer.rooms;
@@ -821,7 +835,7 @@ class RoborockRoomCleanPlatform {
           reasons.push(err.message);
         }
       }
-      if (!current()) return;
+      if (!current()) return dropped();
       candidates = programs();
       // Newer robots also name the room they are in right now in their status.
       const here = status.cleaning_info && Number(status.cleaning_info.segment_id);
@@ -834,7 +848,7 @@ class RoborockRoomCleanPlatform {
         what = `room ${here}, from the robot's status`;
         match = this.matchExternal(candidates, "segments", [here], status) || this.onlyRoutineWith(candidates, here);
       } else {
-        monitor.noMapUntil = Date.now() + NO_MAP_PAUSE_MS;
+        if (asked) monitor.noMapUntil = Date.now() + NO_MAP_PAUSE_MS;
         this.log.info(
           `${robot.name}: a clean was started outside Apple Home, but the robot did not report which rooms, so no switch is shown as on. ` +
             `Tries: ${reasons.map((r, i) => `${i + 1}) ${r}`).join("; ")}. ` +
@@ -1113,14 +1127,35 @@ class RoborockRoomCleanPlatform {
     this.log.info(`${program.name}: stopping and returning to the dock.`);
     try {
       await program.channel.send("app_stop", []);
-      await sleep(1500);
-      await program.channel.send("app_charge", []);
+      await this.sendToDock(program);
     } catch (err) {
       this.log.error(`${program.name}: could not stop: ${err.message}`);
     }
     await sleep(3000);
     await this.restoreSettings(program);
     this.refreshStatusSoon(program.robot.duid, 1000);
+  }
+
+  /**
+   * Send the robot back to the dock after a stop. A robot that is still busy
+   * stopping refuses this for a moment ("action locked"), so it is tried a
+   * few times; a robot that is already on the dock needs nothing.
+   */
+  async sendToDock(program) {
+    const { channel, robot } = program;
+    for (let attempt = 1; ; attempt++) {
+      await sleep(attempt === 1 ? 1500 : this.dockRetryMs);
+      try {
+        await channel.send("app_charge", []);
+        return;
+      } catch (err) {
+        if (!err.refused) throw err;
+        const status = await this.readStatus(robot.duid, channel, 0).catch(() => null);
+        if (status && RoborockRoomCleanPlatform.isCharging(status)) return; // already there
+        if (attempt >= 3) throw err;
+        this.log.debug(`${program.name}: the robot is not ready to go to the dock yet (${err.message}), trying again.`);
+      }
+    }
   }
 
   schedulePoll(program, delay) {

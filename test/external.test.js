@@ -41,6 +41,7 @@ async function startPlatform(config, robot, routines = []) {
   });
   const platform = new api.Platform(log, config, api);
   platform.externalRetryMs = 300;
+  platform.dockRetryMs = 150;
   await platform.start();
   const byName = (name) => [...platform.programs.values()].find((p) => p.name === name);
   const stop = () => {
@@ -224,6 +225,8 @@ test("outside cleans: nothing matches, the robot sends no map, or the option is 
   await wait(2800);
   assert.ok([...run.platform.programs.values()].every((p) => !p.running));
   assert.ok(run.logs.some((l) => l.includes("no routine switch or fan matches")), run.logs.join("\n"));
+  // Every outside clean leaves a first line in the log, whatever comes of it.
+  assert.ok(run.logs.some((l) => l.includes("a clean was started outside Apple Home (in_cleaning=3, state=18); finding out what it is.")), run.logs.join("\n"));
   run.stop();
 
   // The robot answers "ok" but never sends the map: three tries, then give up quietly.
@@ -263,6 +266,7 @@ test("outside cleans: nothing matches, the robot sends no map, or the option is 
   robot.cleaning = [17]; // the second try would now find the kitchen
   await wait(900);
   assert.ok([...run.platform.programs.values()].every((p) => !p.running), "nothing is switched on after the user used Home");
+  assert.ok(run.logs.some((l) => l.includes("stopped looking into the clean started outside Apple Home")), "and the log says it gave up");
   run.stop();
 
   // Turned off in the settings.
@@ -429,6 +433,45 @@ test("no map, but the robot's status names the room it is in", async () => {
   await wait(3800);
   assert.equal(run.byName("Clean מטבח").running, true, run.logs.join("\n"));
   assert.equal(run.byName("מטבח וסלון").running, false);
+  run.stop();
+});
+
+test("stopping: a robot that refuses to go to the dock for a moment is asked again", async () => {
+  // Refused once while it is still stopping, accepted on the second try.
+  let robot = { status: { state: 8, in_cleaning: 0, fan_power: 104, water_box_mode: 200, battery: 90 }, refuse: { app_charge: 1 } };
+  let run = await startPlatform({}, robot);
+  let fan = run.byName("Clean מטבח");
+  fan.service.getCharacteristic("Active").setFn(1);
+  await wait(1200);
+  robot.status = { ...robot.status, state: 18, in_cleaning: 3 };
+  fan.service.getCharacteristic("Active").setFn(0);
+  await wait(2600);
+  assert.equal(run.robotLog.filter((r) => r.method === "app_charge").length, 2);
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+  run.stop();
+
+  // Refused because it is already on the dock: nothing more to do, and no error.
+  robot = { status: { state: 8, in_cleaning: 0, fan_power: 104, water_box_mode: 200, battery: 90 }, refuse: { app_charge: 5 } };
+  run = await startPlatform({}, robot);
+  fan = run.byName("Clean מטבח");
+  fan.service.getCharacteristic("Active").setFn(1);
+  await wait(1200);
+  fan.service.getCharacteristic("Active").setFn(0);
+  await wait(2400);
+  assert.equal(run.robotLog.filter((r) => r.method === "app_charge").length, 1);
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+  run.stop();
+
+  // Refused every time away from the dock: said once, as an error.
+  robot = { status: { state: 18, in_cleaning: 3, fan_power: 104, water_box_mode: 200, battery: 90 }, refuse: { app_charge: 9 } };
+  run = await startPlatform({ followExternal: false }, robot);
+  fan = run.byName("Clean מטבח");
+  fan.service.getCharacteristic("Active").setFn(1);
+  await wait(3200);
+  fan.service.getCharacteristic("Active").setFn(0);
+  await wait(2800);
+  assert.equal(run.robotLog.filter((r) => r.method === "app_charge").length, 3);
+  assert.equal(run.logs.filter((l) => l.startsWith("ERR") && l.includes("action locked")).length, 1, run.logs.join("\n"));
   run.stop();
 });
 

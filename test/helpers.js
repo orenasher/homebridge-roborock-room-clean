@@ -77,6 +77,12 @@ function startFakeBroker(robotLog, robot = {}) {
           if (req.method === "get_status") result = [robot.status || { state: 8, in_cleaning: 0, fan_power: 101, water_box_mode: 202, battery: 87 }];
           const ts = Math.floor(Date.now() / 1000);
           const outTopic = topic.replace("rr/m/i/", "rr/m/o/");
+          // "action locked": the robot refuses a command it cannot do right now.
+          let error = null;
+          if (robot.refuse && robot.refuse[req.method] > 0) {
+            robot.refuse[req.method]--;
+            error = { code: -10007, message: "action locked" };
+          }
           const publish = (protocol, payload) => {
             const resp = P.encodeMessage({ localKey: LOCAL_KEY, protocol, payload, ts });
             const t = Buffer.alloc(2); t.writeUInt16BE(outTopic.length);
@@ -86,7 +92,7 @@ function startFakeBroker(robotLog, robot = {}) {
             do { let x = L % 128; L = Math.floor(L / 128); if (L) x |= 0x80; lenBytes.push(x); } while (L);
             sock.write(Buffer.concat([Buffer.from([0x30, ...lenBytes]), pub]));
           };
-          publish(102, Buffer.from(JSON.stringify({ dps: { 102: JSON.stringify({ id: req.id, result }) }, t: ts })));
+          publish(102, Buffer.from(JSON.stringify({ dps: { 102: JSON.stringify(error ? { id: req.id, error } : { id: req.id, result }) }, t: ts })));
           // The map itself follows the "ok" as a separate message. First one that
           // belongs to another app on the same account (it must be ignored).
           if (wantsMap && !notReady && robot.cleaning && (!robot.answersMap || robot.answersMap(req))) {

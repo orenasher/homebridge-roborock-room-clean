@@ -4,6 +4,9 @@ const fs = require("fs");
 const path = require("path");
 const cloud = require("./lib/cloud");
 const { RoborockSession } = require("./lib/robot");
+const { MapView } = require("./lib/mapview");
+const { PictureCamera } = require("./lib/camera");
+const { Painter } = require("./lib/painter");
 
 const PLUGIN_NAME = "homebridge-roborock-room-clean";
 const PLATFORM_NAME = "RoborockRoomClean";
@@ -25,12 +28,24 @@ const STATE_NAMES = {
  * Names the user typed and names from the Roborock app are never translated.
  */
 const TEXT = {
-  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}` },
-  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}` },
+  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
+  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
 };
 
-/** After the plugin stops a clean, the robot still reports "cleaning" for a moment: do not mistake that for a new one. */
+/**
+ * After the plugin stops a clean, the robot still reports "cleaning" for a
+ * moment: do not mistake that for a new one. The wait ends early, as soon as
+ * the robot is seen to have stopped.
+ */
 const QUIET_AFTER_STOP_MS = 60000;
+
+/**
+ * When Roborock's cloud refused to let the plugin listen to other apps' map
+ * requests, it is not tried again for this long: a month after a plain "no",
+ * a week when the cloud closed the connection instead (which is only very
+ * likely a "no").
+ */
+const LISTEN_RETRY_MS = { refused: 30 * 24 * 60 * 60 * 1000, closed: 7 * 24 * 60 * 60 * 1000 };
 
 /**
  * After the robot reports by itself that it started doing something, its
@@ -61,6 +76,9 @@ class RoborockRoomCleanPlatform {
     this.programs = new Map(); // uuid -> runtime program
     this.docks = new Map(); // duid -> charging sensor
     this.monitors = new Map(); // duid -> { robot, channel, last, timer } (robot status: battery, on the dock or not)
+    this.views = new Map(); // duid -> MapView (the picture of the map camera)
+    this.cameras = [];
+    this.painter = null;
     this.storageDir = path.join(api.user.storagePath(), STORAGE_DIR);
     this.session = null;
     this.stopped = false;
@@ -80,6 +98,9 @@ class RoborockRoomCleanPlatform {
       this.stopped = true;
       for (const p of this.programs.values()) clearTimeout(p.pollTimer);
       for (const m of this.monitors.values()) clearTimeout(m.timer);
+      for (const camera of this.cameras) camera.close();
+      for (const view of this.views.values()) view.close();
+      if (this.painter) this.painter.close(true);
       if (this.session) this.session.stop();
     });
   }
@@ -159,7 +180,22 @@ class RoborockRoomCleanPlatform {
 
     const roomNames = new Map((home.rooms || []).map((r) => [String(r.id), r.name]));
     this.auth = auth;
-    this.session = new RoborockSession(auth.userData, this.log, { overhear: this.config.followExternal !== false });
+    // Listening to other apps' map requests is something Roborock's cloud may
+    // refuse by closing the connection. Once it did, that is remembered, so a
+    // restart does not cost two more reconnects.
+    const listen = this.readJson("listen.json");
+    const retryAt = listen && Number(listen.refusedAt) > 0 ? Number(listen.refusedAt) + (LISTEN_RETRY_MS[listen.how] || LISTEN_RETRY_MS.closed) : 0;
+    const refusedLately = this.config.followExternal !== false && Date.now() < retryAt && Number(listen.refusedAt) <= Date.now();
+    if (refusedLately) {
+      this.log.info(
+        `The Roborock cloud did not let this plugin see other apps' map requests on ${new Date(Number(listen.refusedAt)).toISOString().slice(0, 10)}, so that is not tried again until ${new Date(retryAt).toISOString().slice(0, 10)}. ` +
+          "A room clean started from the Roborock app shows in Apple Home once the app is closed."
+      );
+    }
+    this.session = new RoborockSession(auth.userData, this.log, {
+      overhear: this.config.followExternal !== false && !refusedLately,
+      onOverhearRefused: (how) => this.writeJson("listen.json", { refusedAt: Date.now(), how: how === "closed" ? "closed" : "refused" }),
+    });
     this.session.start();
 
     const wanted = new Set();
@@ -183,6 +219,13 @@ class RoborockRoomCleanPlatform {
         }
       }
       this.setupStatusMonitor(robot, channel);
+      if (this.config.mapCamera === true) {
+        try {
+          this.setupMapCamera(robot, channel, segments, robots.length > 1, products.get(robot.productId));
+        } catch (err) {
+          this.log.error(`${robot.name}: the map camera could not be set up: ${err.message}`);
+        }
+      }
       if (this.config.chargingSensor !== false) {
         wanted.add(this.setupChargingSensor(robot, channel, robots.length > 1));
       }
@@ -222,6 +265,78 @@ class RoborockRoomCleanPlatform {
       for (const a of stale) this.accessories.delete(a.UUID);
       this.log.info(`Removed ${stale.length} old accessory(ies).`);
     }
+  }
+
+  // ---------- map camera ----------
+
+  /**
+   * A camera in Apple Home that shows the robot's map, drawn by this plugin.
+   * It is its own accessory (Apple Home wants cameras that way) and is added
+   * once, with the setup code of this plugin's bridge.
+   */
+  setupMapCamera(robot, channel, rooms, multiRobot, product) {
+    if (!this.painter) this.painter = new Painter(this.log);
+    let name = String(this.config.mapCameraName || "").trim();
+    if (!name) name = this.text.map(robot.name);
+    else if (multiRobot) name = `${name} ${robot.name}`;
+    const config = this.config;
+    const view = new MapView({
+      log: this.log,
+      name,
+      channel,
+      painter: this.painter,
+      file: path.join(this.storageDir, `map-${robot.duid}.bin`),
+      options: () => ({
+        theme: config.mapTheme,
+        colors: config.mapColors,
+        roomColors: config.mapRoomColors,
+        rooms,
+        rotation: Number(config.mapRotation) || 0,
+        labels: config.mapLabels !== false,
+        statusBar: config.mapStatus !== false,
+        language: config.language === "he" ? "he" : "en",
+        size: 1280,
+      }),
+      status: () => {
+        const monitor = this.monitors.get(robot.duid);
+        if (!monitor || (!monitor.full && !monitor.last)) return null;
+        return { ...(monitor.full || {}), ...(monitor.last || {}) };
+      },
+    });
+    try {
+      fs.mkdirSync(this.storageDir, { recursive: true });
+    } catch {
+      /* the map is then simply not kept between restarts */
+    }
+    const kept = view.load();
+    this.views.set(robot.duid, view);
+    channel.onMap = (map) => view.offer(map);
+    const camera = new PictureCamera({
+      api: this.api,
+      log: this.log,
+      pluginName: PLUGIN_NAME,
+      name,
+      id: robot.duid,
+      info: { manufacturer: "Roborock", model: (product && (product.name || product.model)) || "Robot vacuum", serial: robot.sn || robot.duid, firmware: /^\d+(\.\d+){0,2}$/.test(String(robot.fv || "")) ? String(robot.fv) : null },
+      ffmpegPath: config.ffmpegPath,
+      snapshot: () => view.snapshot(),
+      picture: () => view.picture(),
+      size: () => view.size,
+      watching: (on) => view.setLive(on),
+    });
+    camera.publish();
+    this.cameras.push(camera);
+    this.log.info(
+      `${name}: the map camera is ready. If it is not in Apple Home yet, add it once: Add Accessory > More options, choose "${name}" and enter the setup code of this plugin's bridge.`
+    );
+    // Have a picture ready before Home asks for one; without a kept map the robot is asked once.
+    view.draw();
+    if (!kept) {
+      setTimeout(() => {
+        if (!this.stopped) view.fetch().then(() => view.draw(), () => {});
+      }, 8000).unref?.();
+    }
+    return view;
   }
 
   /** Room list for one robot: [{ segmentId, name }]. Falls back to the cache while the robot is offline. */
@@ -523,7 +638,7 @@ class RoborockRoomCleanPlatform {
     const saved = this.readJson(`status-${robot.duid}.json`);
     const known = saved && typeof saved.battery === "number" && typeof saved.state === "number" ? { state: saved.state, battery: saved.battery } : null;
     // Until the first answer arrives, Home shows the values from before the restart.
-    const monitor = { robot, channel, last: known, full: null, fullAt: 0, inflight: null, fails: 0, staleWarned: false, timer: null, dueAt: 0, polledAt: 0, job: null, quietUntil: 0, noMapUntil: 0, closeUntil: 0, reportedAt: 0 };
+    const monitor = { robot, channel, last: known, full: null, fullAt: 0, inflight: null, fails: 0, staleWarned: false, timer: null, dueAt: 0, polledAt: 0, job: null, quietFrom: 0, quietUntil: 0, noMapUntil: 0, closeUntil: 0, reportedAt: 0 };
     this.monitors.set(robot.duid, monitor);
     const intervalMs = Math.max(30, Number(this.config.statusInterval) || 60) * 1000;
     monitor.tick = async () => {
@@ -640,9 +755,12 @@ class RoborockRoomCleanPlatform {
     if (!status || typeof status.battery !== "number") return;
     const monitor = this.monitors.get(duid);
     if (monitor) {
-      const changed = !monitor.last || monitor.last.state !== status.state || monitor.last.battery !== status.battery;
+      const before = monitor.last;
+      const changed = !before || before.state !== status.state || before.battery !== status.battery;
       monitor.last = { state: status.state, battery: status.battery };
       if (changed) this.writeJson(`status-${duid}.json`, monitor.last);
+      const view = this.views.get(duid);
+      if (view) view.statusChanged(before, monitor.last);
     }
     this.updateChargingSensor(duid, status);
     for (const program of this.programs.values()) {
@@ -757,7 +875,10 @@ class RoborockRoomCleanPlatform {
   /** The plugin just stopped a clean on this robot (or failed to start one). */
   quiet(duid) {
     const monitor = this.claim(duid);
-    if (monitor) monitor.quietUntil = Date.now() + QUIET_AFTER_STOP_MS;
+    if (monitor) {
+      monitor.quietFrom = Date.now();
+      monitor.quietUntil = Date.now() + QUIET_AFTER_STOP_MS;
+    }
   }
 
   /**
@@ -768,6 +889,12 @@ class RoborockRoomCleanPlatform {
    * is done.
    */
   watchExternal(monitor, status) {
+    // The robot was asked for this status after the plugin stopped its clean,
+    // and it is no longer cleaning: the stop has taken, so a clean that shows
+    // up from now on was started elsewhere.
+    if (Date.now() < monitor.quietUntil && monitor.quietFrom && monitor.polledAt > monitor.quietFrom + 2000 && !CLEANING_STATES.has(status.state)) {
+      monitor.quietUntil = Date.now();
+    }
     if (!status.in_cleaning) {
       monitor.job = null;
       // The robot's report led to no clean (back on the dock, or the quick checks ran out): forget when it came.

@@ -3,7 +3,11 @@
 const fs = require("fs");
 const path = require("path");
 const { HomebridgePluginUiServer, RequestError } = require("@homebridge/plugin-ui-utils");
+const zlib = require("zlib");
 const { RoborockLogin, getHomeData, getRoutines } = require("../lib/cloud");
+const { makePicture } = require("../lib/picture");
+const { THEMES, DEFAULT_THEME, COLOR_KEYS } = require("../lib/themes");
+const { demoMap, demoRooms } = require("../lib/demo-map");
 
 const STORAGE_DIR = "roborock-room-clean";
 
@@ -18,6 +22,8 @@ class UiServer extends HomebridgePluginUiServer {
     this.onRequest("/send-code", (p) => this.sendCode(p));
     this.onRequest("/login", (p) => this.doLogin(p));
     this.onRequest("/logout", () => this.logout());
+    this.onRequest("/map/themes", () => this.mapThemes());
+    this.onRequest("/map/preview", (p) => this.mapPreview(p || {}));
 
     this.ready();
   }
@@ -115,6 +121,7 @@ class UiServer extends HomebridgePluginUiServer {
       fs.mkdirSync(this.dir, { recursive: true });
       fs.writeFileSync(this.authFile(), JSON.stringify({ ...auth, savedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
       fs.writeFileSync(path.join(this.dir, "home-cache.json"), JSON.stringify(home, null, 2));
+      this.forget("listen.json"); // what Roborock's cloud refused the previous login says nothing about this one
       this.login = null;
       const robots = [...(home.devices || []), ...(home.receivedDevices || [])].map((d) => d.name);
       return { ok: true, robots, rooms: (home.rooms || []).map((r) => r.name) };
@@ -124,12 +131,75 @@ class UiServer extends HomebridgePluginUiServer {
     }
   }
 
-  logout() {
+  // ---------- map camera ----------
+
+  /** The colour styles the map camera offers, with the colours a user may replace. */
+  mapThemes() {
+    return {
+      defaultTheme: DEFAULT_THEME,
+      colorKeys: COLOR_KEYS,
+      themes: Object.entries(THEMES).map(([id, theme]) => ({
+        id,
+        title: theme.title,
+        swatch: [theme.background[0], ...theme.rooms.slice(0, 4), theme.walls],
+        colors: Object.fromEntries(COLOR_KEYS.map((key) => [key, key === "background" ? theme.background[0] : theme[key]])),
+      })),
+    };
+  }
+
+  /**
+   * The map camera's picture with the settings being tried out, drawn from
+   * the robot's own map when the plugin has kept one, otherwise from a
+   * made-up home. Returns { image (data URL), demo, rooms: [{ name, color, own }] }.
+   */
+  mapPreview(p) {
+    const language = p.language === "he" ? "he" : "en";
+    let map = null;
+    let rooms = null;
+    let status = null;
     try {
-      fs.unlinkSync(this.authFile());
+      const files = fs
+        .readdirSync(this.dir)
+        .filter((f) => /^map-.+\.bin$/.test(f))
+        .map((f) => ({ f, at: fs.statSync(path.join(this.dir, f)).mtimeMs }))
+        .sort((a, b) => b.at - a.at);
+      if (files.length) {
+        const duid = files[0].f.slice(4, -4);
+        map = zlib.gunzipSync(fs.readFileSync(path.join(this.dir, files[0].f)));
+        rooms = this.readJson(`rooms-${duid}.json`);
+        status = this.readJson(`status-${duid}.json`);
+      }
+    } catch {
+      map = null;
+    }
+    const options = {
+      theme: p.theme,
+      colors: p.colors,
+      roomColors: p.roomColors,
+      rotation: p.rotation,
+      labels: p.labels !== false,
+      statusBar: p.statusBar !== false,
+      language,
+      size: 960,
+      highlight: false,
+    };
+    let out = map ? makePicture(map, { ...options, rooms: rooms || [], status: status || { state: 8, battery: 100 } }) : null;
+    const demo = !out || !out.hasMap;
+    if (demo) out = makePicture(demoMap({ cleaning: [16] }), { ...options, rooms: demoRooms(language), status: { state: 18, battery: 76, clean_area: 9e6, clean_time: 540 } });
+    return { image: `data:image/png;base64,${out.png.toString("base64")}`, demo, rooms: demo ? [] : out.rooms };
+  }
+
+  forget(file) {
+    try {
+      fs.unlinkSync(path.join(this.dir, file));
     } catch {
       /* already gone */
     }
+  }
+
+  logout() {
+    this.forget("auth.json");
+    this.forget("listen.json");
     return { ok: true };
   }
 }

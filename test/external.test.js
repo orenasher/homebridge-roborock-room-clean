@@ -23,12 +23,13 @@ function scene(id, name, method, params) {
   return { id, name, enabled: true, param: JSON.stringify({ triggers: [], action: { type: "S", items: [{ id: 1, type: "CMD", param: JSON.stringify({ id: 1, method, params }) }] } }) };
 }
 
-async function startPlatform(config, robot, routines = []) {
+async function startPlatform(config, robot, routines = [], keepDir = null) {
   const robotLog = [];
   const broker = await startFakeBroker(robotLog, robot);
-  const storage = fs.mkdtempSync(path.join(os.tmpdir(), "rrc-"));
+  // `keepDir`: start again with what an earlier start kept on disk.
+  const storage = keepDir ? path.dirname(keepDir) : fs.mkdtempSync(path.join(os.tmpdir(), "rrc-"));
   const dir = path.join(storage, "roborock-room-clean");
-  fs.mkdirSync(dir);
+  if (!keepDir) fs.mkdirSync(dir);
   const rriot = { ...RRIOT, r: { ...RRIOT.r, m: `tcp://127.0.0.1:${broker.address().port}` } };
   fs.writeFileSync(path.join(dir, "auth.json"), JSON.stringify({ email: "a@b.c", baseUrl: "https://x", userData: { token: "t", rriot } }));
   cloud.getHomeData = async () => HOME;
@@ -389,6 +390,42 @@ test("a clean of ours that was stopped long ago does not hide a new one started 
   run.stop();
 });
 
+test("after a fan is turned off in Home, a clean started in the Roborock app right away shows without waiting a minute", async () => {
+  const robot = { status: { state: 8, in_cleaning: 0, fan_power: 104, water_box_mode: 200, battery: 90 } };
+  const run = await startPlatform({}, robot);
+  const monitor = run.platform.monitors.get(DUID);
+  const salon = run.byName("Clean סלון");
+  salon.service.getCharacteristic("Active").setFn(1);
+  await wait(2600);
+  assert.equal(salon.running, true);
+  robot.status = { state: 18, in_cleaning: 3, fan_power: 104, water_box_mode: 200, battery: 90 };
+  salon.service.getCharacteristic("Active").setFn(0);
+  await wait(400);
+  assert.equal(salon.running, false);
+  assert.ok(monitor.quietUntil > Date.now() + 50000, "right after the stop the robot's reports are not trusted");
+  // Still "cleaning" in a status asked for a moment after the stop: that is the old clean winding down, not a new one.
+  monitor.full = null;
+  await run.platform.readStatus(DUID, monitor.channel);
+  await wait(200);
+  assert.ok([...run.platform.programs.values()].every((p) => !p.running));
+  assert.ok(monitor.quietUntil > Date.now() + 50000);
+  // The robot is on its way to the dock: the stop has taken.
+  await wait(2000);
+  robot.status = { state: 6, in_cleaning: 0, fan_power: 104, water_box_mode: 200, battery: 90 };
+  monitor.full = null;
+  await run.platform.readStatus(DUID, monitor.channel);
+  assert.ok(monitor.quietUntil <= Date.now(), "the wait ends as soon as the robot is seen to have stopped");
+  // The kitchen is started in the Roborock app a few seconds later.
+  robot.cleaning = [17];
+  robot.status = { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 90 };
+  monitor.full = null;
+  await run.platform.readStatus(DUID, monitor.channel);
+  await wait(600);
+  assert.equal(run.byName("Clean מטבח").running, true, run.logs.filter((l) => !l.startsWith("DBG")).join("\n"));
+  assert.equal(salon.running, false);
+  run.stop();
+});
+
 test("map requests: own endpoint and one key, the account's endpoint as second way, retry answers", async () => {
   const account = require("crypto").createHash("md5").update(RRIOT.k).digest().subarray(8, 14).toString("base64");
   // Asked under an endpoint of our own, always with the same key.
@@ -648,6 +685,30 @@ test("a cloud that does not allow listening to other apps' requests: said once, 
   assert.equal([...run.platform.session.client.subscriptions].filter((t) => t.startsWith("rr/m/i/")).length, 0);
   run.stop();
   assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});
+
+test("a cloud that refused the listening is not asked again at the next start", async () => {
+  const robot = { refuseListen: "close", status: { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, battery: 90 } };
+  const first = await startPlatform({}, robot);
+  for (let n = 0; n < 60 && !first.logs.some((l) => /does not let this plugin see other apps/.test(l)); n++) await wait(100);
+  assert.ok(first.logs.some((l) => /does not let this plugin see other apps/.test(l)));
+  const kept = JSON.parse(fs.readFileSync(path.join(first.platform.storageDir, "listen.json"), "utf8"));
+  assert.ok(Date.now() - kept.refusedAt < 60000);
+  assert.equal(kept.how, "refused");
+  first.stop();
+  // The next start, with what was kept: the subscription is not tried.
+  const second = await startPlatform({}, robot, [], first.platform.storageDir);
+  await wait(600);
+  assert.equal(second.platform.session.client.optional.size, 0, "nothing optional is subscribed to");
+  assert.ok(!second.logs.some((l) => /does not let this plugin see other apps/.test(l)));
+  assert.equal(second.logs.filter((l) => /is not tried again until \d{4}-\d\d-\d\d/.test(l)).length, 1, "the log says why, and until when");
+  second.stop();
+  // A week later (a closed connection is only very likely a "no") it is tried again.
+  fs.writeFileSync(path.join(first.platform.storageDir, "listen.json"), JSON.stringify({ refusedAt: Date.now() - 8 * 24 * 3600 * 1000, how: "closed" }));
+  const third = await startPlatform({}, { status: robot.status }, [], first.platform.storageDir);
+  await wait(300);
+  assert.equal(third.platform.session.client.optional.size, 1);
+  third.stop();
 });
 
 test("with the feature off the plugin does not listen to other apps", async () => {

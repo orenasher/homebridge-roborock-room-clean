@@ -20,6 +20,18 @@
   [dir="rtl"] .list-group { padding-right: 0; }
   [dir="rtl"] .form-check { padding-left: 0; padding-right: 1.5em; }
   [dir="rtl"] .form-check .form-check-input { float: right; margin-left: 0; margin-right: -1.5em; }
+  /* Map camera */
+  .rr-map-img { display: block; max-width: 100%; max-height: 26rem; margin: 0 auto; border-radius: 0.6rem; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25); }
+  .rr-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.5rem; }
+  .rr-theme { display: block; width: 100%; margin: 0; padding: 0.4rem; border: 2px solid rgba(128, 128, 128, 0.35); border-radius: 0.6rem; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: center; }
+  .rr-theme[aria-checked="true"] { border-color: #ffa000; box-shadow: 0 0 0 1px #ffa000; }
+  .rr-theme:focus-visible { outline: 2px solid #ffa000; outline-offset: 2px; }
+  .rr-swatch { display: flex; height: 1.6rem; border-radius: 0.35rem; overflow: hidden; margin-bottom: 0.3rem; }
+  .rr-swatch > span { flex: 1 1 0; }
+  .rr-color-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+  .rr-color-row input[type="color"] { flex: 0 0 auto; width: 2.6rem; height: 2rem; padding: 0.1rem; border: 1px solid rgba(128, 128, 128, 0.5); border-radius: 0.35rem; background: transparent; cursor: pointer; }
+  .rr-color-row .rr-color-name { flex: 1 1 auto; min-width: 0; }
+  .rr-color-row .btn { flex: 0 0 auto; }
 </style>
 
 <div class="rr-lang mb-3">
@@ -96,6 +108,59 @@
 </div>
 
 <!-- The plugin's settings in Hebrew. In English the regular Homebridge form is shown instead. -->
+<div class="card mb-3" id="rr-map-card" style="display: none">
+  <div class="card-body">
+    <h5 class="card-title mb-2" data-t="map.title">Map camera</h5>
+    <p class="rr-hint mb-2" data-t="map.help"></p>
+    <div class="form-check mb-2">
+      <input class="form-check-input" type="checkbox" id="rr-map-on" />
+      <label class="form-check-label" for="rr-map-on" data-t="map.enable">Add a camera that shows the robot's map to Apple Home</label>
+    </div>
+    <div id="rr-map-body" style="display: none">
+      <img class="rr-map-img mb-1" id="rr-map-img" alt="" />
+      <p class="rr-hint mb-3 text-center" id="rr-map-note"></p>
+      <h6 class="mb-2" id="rr-map-style-title" data-t="map.style">Colour style</h6>
+      <div class="rr-themes mb-3" id="rr-map-themes" role="radiogroup" aria-labelledby="rr-map-style-title"></div>
+      <details class="rr-section" id="rr-map-colors-box">
+        <summary data-t="map.ownColors">Your own colours</summary>
+        <p class="rr-hint mb-2" data-t="map.ownColorsHelp"></p>
+        <div id="rr-map-colors"></div>
+      </details>
+      <details class="rr-section" id="rr-map-rooms-box">
+        <summary data-t="map.roomColors">A colour for each room</summary>
+        <p class="rr-hint mb-2" data-t="map.roomColorsHelp"></p>
+        <div id="rr-map-rooms"></div>
+      </details>
+      <details class="rr-section" id="rr-map-more-box">
+        <summary data-t="map.more">Name, direction and what is shown</summary>
+        <div class="rr-field">
+          <label for="rr-map-name" data-t="map.name">Camera name</label>
+          <input type="text" class="form-control" id="rr-map-name" dir="auto" />
+          <p class="rr-hint" data-t="map.nameHelp"></p>
+        </div>
+        <div class="rr-field">
+          <label for="rr-map-rotation" data-t="map.rotation">Turn the map</label>
+          <select class="form-control" id="rr-map-rotation">
+            <option value="0" data-t="map.rotation0">As the robot stores it</option>
+            <option value="90" data-t="map.rotation90">A quarter turn clockwise</option>
+            <option value="180" data-t="map.rotation180">Upside down</option>
+            <option value="270" data-t="map.rotation270">A quarter turn anticlockwise</option>
+          </select>
+        </div>
+        <div class="form-check rr-field">
+          <input class="form-check-input" type="checkbox" id="rr-map-labels" />
+          <label class="form-check-label" for="rr-map-labels" data-t="map.labels">Write the room names on the map</label>
+        </div>
+        <div class="form-check rr-field">
+          <input class="form-check-input" type="checkbox" id="rr-map-status" />
+          <label class="form-check-label" for="rr-map-status" data-t="map.status">Show the status line (what the robot is doing, battery)</label>
+        </div>
+      </details>
+      <p class="rr-hint mt-3 mb-0" data-t="map.addHelp"></p>
+    </div>
+  </div>
+</div>
+
 <div class="card mb-3" id="rr-form" style="display: none">
   <div class="card-body">
     <h5 class="card-title mb-2" data-t="form.title">Settings</h5>
@@ -177,6 +242,38 @@
         "toast.loginFailed": "Login failed",
         "toast.loggedOut": "Logged out.",
         "default.fan": "Clean {room}",
+        "map.title": "Map camera",
+        "map.help": "A camera in Apple Home that shows the robot's map: the rooms in colour, the path it drove, where it is now and what it is doing. The plugin reads and draws the map itself, with no other plugin and no script. Open the camera for the live view; its tile shows the latest picture.",
+        "map.enable": "Add a camera that shows the robot's map to Apple Home",
+        "map.style": "Colour style",
+        "map.ownColors": "Your own colours",
+        "map.ownColorsHelp": "Replace single colours of the chosen style. The \u21BA button next to a colour goes back to the style's colour.",
+        "map.roomColors": "A colour for each room",
+        "map.roomColorsHelp": "Give a room its own colour. Rooms you leave alone get their colour from the style, so that rooms next to each other differ.",
+        "map.roomColorsLater": "The rooms appear here once Homebridge has been restarted and the plugin has read them from the robot.",
+        "map.more": "Name, direction and what is shown",
+        "map.name": "Camera name",
+        "map.nameHelp": "Leave empty for the robot's name followed by \"Map\". Once the camera is in Apple Home, rename it in the Home app.",
+        "map.namePlaceholder": "S8 Map",
+        "map.rotation": "Turn the map",
+        "map.rotation0": "As the robot stores it",
+        "map.rotation90": "A quarter turn clockwise",
+        "map.rotation180": "Upside down",
+        "map.rotation270": "A quarter turn anticlockwise",
+        "map.labels": "Write the room names on the map",
+        "map.status": "Show the status line (what the robot is doing, battery)",
+        "map.addHelp": "After pressing Save and restarting Homebridge, add the camera to Apple Home once: Add Accessory > More options, choose the camera and enter the setup code of this plugin's bridge (the code shown next to the plugin's QR code in Homebridge). The live view needs ffmpeg on the Homebridge computer; without it the camera shows a picture that refreshes every few seconds. If you turn the camera off here later, also remove it in the Home app.",
+        "map.demo": "This is an example home. Your own map appears here once the camera has been on for a while.",
+        "map.yours": "Your robot's map, as the camera will show it.",
+        "map.previewFailed": "The preview could not be drawn ({error}).",
+        "map.reset": "Back to the style's colour",
+        "map.color.background": "Background",
+        "map.color.walls": "Walls",
+        "map.color.path": "Path",
+        "map.color.robot": "Robot",
+        "map.color.dock": "Dock",
+        "map.color.text": "Text",
+        "map.color.textBack": "Behind the text",
         "form.title": "Settings",
         "form.intro": "",
         "form.list": "",
@@ -241,6 +338,38 @@
         "toast.loginFailed": "ההתחברות נכשלה",
         "toast.loggedOut": "התנתקת.",
         "default.fan": "ניקוי {room}",
+        "map.title": "מצלמת מפה",
+        "map.help": "מצלמה ב\"בית\" שמציגה את המפה של הרובוט: החדרים בצבעים, המסלול שעבר, איפה הוא נמצא עכשיו ומה הוא עושה. התוסף קורא ומצייר את המפה בעצמו, בלי תוסף אחר ובלי סקריפט. פתיחת המצלמה מציגה את המפה בשידור חי, והאריח שלה מציג את התמונה האחרונה.",
+        "map.enable": "הוסף ל\"בית\" מצלמה שמציגה את המפה של הרובוט",
+        "map.style": "סגנון צבעים",
+        "map.ownColors": "צבעים משלך",
+        "map.ownColorsHelp": "החלף צבעים בודדים בסגנון שנבחר. הכפתור \u21BA שליד צבע מחזיר את הצבע של הסגנון.",
+        "map.roomColors": "צבע לכל חדר",
+        "map.roomColorsHelp": "תן לחדר צבע משלו. חדרים שלא תיגע בהם מקבלים צבע מהסגנון, כך שחדרים סמוכים נראים שונים זה מזה.",
+        "map.roomColorsLater": "החדרים יופיעו כאן אחרי ש-Homebridge יופעל מחדש והתוסף יקרא אותם מהרובוט.",
+        "map.more": "שם, כיוון ומה מוצג",
+        "map.name": "שם המצלמה",
+        "map.nameHelp": "השאר ריק כדי לקבל \"מפת\" ושם הרובוט. אחרי שהמצלמה נוספה ל\"בית\", משנים את שמה באפליקציית \"בית\".",
+        "map.namePlaceholder": "מפת S8",
+        "map.rotation": "סיבוב המפה",
+        "map.rotation0": "כפי שהרובוט שומר אותה",
+        "map.rotation90": "רבע סיבוב עם כיוון השעון",
+        "map.rotation180": "הפוכה",
+        "map.rotation270": "רבע סיבוב נגד כיוון השעון",
+        "map.labels": "כתוב את שמות החדרים על המפה",
+        "map.status": "הצג שורת מצב (מה הרובוט עושה, סוללה)",
+        "map.addHelp": "אחרי לחיצה על שמירה והפעלה מחדש של Homebridge, הוסף את המצלמה ל\"בית\" פעם אחת: הוסף אביזר > אפשרויות נוספות, בחר את המצלמה והזן את קוד ההתקנה של הגשר של התוסף הזה (הקוד שמופיע ליד קוד ה-QR של התוסף ב-Homebridge). לשידור החי נדרש ffmpeg במחשב של Homebridge; בלעדיו המצלמה מציגה תמונה שמתרעננת כל כמה שניות. אם תכבה כאן את המצלמה בעתיד, הסר אותה גם באפליקציית \"בית\".",
+        "map.demo": "זה בית לדוגמה. המפה שלך תופיע כאן אחרי שהמצלמה תפעל זמן מה.",
+        "map.yours": "המפה של הרובוט שלך, כפי שהמצלמה תציג אותה.",
+        "map.previewFailed": "לא ניתן לצייר את התצוגה המקדימה ({error}).",
+        "map.reset": "חזרה לצבע של הסגנון",
+        "map.color.background": "רקע",
+        "map.color.walls": "קירות",
+        "map.color.path": "מסלול הניקוי",
+        "map.color.robot": "הרובוט",
+        "map.color.dock": "עמדת הטעינה",
+        "map.color.text": "כיתוב",
+        "map.color.textBack": "הרקע של הכיתוב",
         "form.title": "הגדרות",
         "form.intro": "התוסף מוסיף ב\"בית\" מאוורר לכל חדר במפה של הרובוט. הדלקת המאוורר מנקה את החדר, ומהירות המאוורר קובעת את עוצמת השאיבה (25% שקט, 50% מאוזן, 75% טורבו, 100% מקסימום). ברשימת החדרים למעלה בוחרים לאילו חדרים יהיה מאוורר וכמה מעברים יעשה כל אחד; ברירות המחדל נקבעות כאן. מאווררי החדרים אינם משתמשים בתוכניות העבודה של Roborock, ולכן מגבלת 10 התוכניות של האפליקציה לא חלה עליהם. את תוכניות העבודה שכבר יש לך אפשר להוסיף כמתגים מרשימת תוכניות העבודה למעלה.",
         "form.list": "כמה ערכים מפרידים בפסיק.",
@@ -274,6 +403,7 @@
         "field.statusInterval": ["בדוק את מצב הרובוט כל (שניות)", "כל כמה זמן הרובוט נשאל על מצבו כשהוא בעמדת הטעינה. מחוץ לעמדה הוא נשאל כל 30 שניות, ושינויים שהרובוט מדווח עליהם בעצמו (יציאה מהעמדה, רמת סוללה) מופיעים מיד."],
         "field.robotIp": ["כתובת IP של הרובוט (לא חובה)", "בדרך כלל נמצאת אוטומטית. הפקודות נשלחות ישירות לרובוט ברשת הביתית, והענן של Roborock משמש כגיבוי."],
         "field.skipDevices": ["רובוטים להתעלם מהם (שם או מזהה מכשיר)"],
+        "field.ffmpegPath": ["הנתיב אל ffmpeg (לא חובה)", "רק לשידור החי של מצלמת המפה, ורק אם ffmpeg לא נמצא מעצמו.", "ffmpeg"],
         "option.quiet": "שקט (25%)",
         "option.balanced": "מאוזן (50%)",
         "option.turbo": "טורבו (75%)",
@@ -678,6 +808,292 @@
       resetProgramForm(block);
     });
 
+    // ---------- map camera ----------
+
+    // The colour styles (from the plugin itself) and what the card shows now.
+    let mapThemes = null; // { defaultTheme, colorKeys, themes: [{ id, title, swatch, colors }] }
+    let mapRooms = []; // [{ name, color, own }] as drawn in the last preview of the robot's own map
+    let previewTimer = null;
+    let previewCount = 0;
+    let mapTrying = null; // a colour being tried in a colour box, not stored yet: changes the preview only
+
+    /** A colour as the colour boxes want it (#rrggbb), from what the plugin accepts (#rgb or #rrggbb, with or without the #); null for anything else. */
+    function cleanColor(value) {
+      if (typeof value !== "string") return null;
+      let hex = value.trim().replace(/^#/, "").toLowerCase();
+      if (/^[0-9a-f]{3}$/.test(hex)) hex = hex.replace(/./g, "$&$&");
+      return /^[0-9a-f]{6}$/.test(hex) ? "#" + hex : null;
+    }
+
+    /** The map settings as stored, tidied: only real colours, only rooms that have one. */
+    function mapSettings(block) {
+      const colors = {};
+      for (const [key, value] of Object.entries(block.mapColors && typeof block.mapColors === "object" ? block.mapColors : {})) {
+        if (cleanColor(value)) colors[key] = cleanColor(value);
+      }
+      const roomColors = (Array.isArray(block.mapRoomColors) ? block.mapRoomColors : []).filter((r) => r && norm(r.room) && cleanColor(r.color)).map((r) => ({ room: String(r.room), color: cleanColor(r.color) }));
+      const known = mapThemes && mapThemes.themes.some((th) => th.id === block.mapTheme);
+      return {
+        theme: known ? block.mapTheme : mapThemes ? mapThemes.defaultTheme : "roborock",
+        colors,
+        roomColors,
+        rotation: [90, 180, 270].includes(Number(block.mapRotation)) ? Number(block.mapRotation) : 0,
+        labels: block.mapLabels !== false,
+        statusBar: block.mapStatus !== false,
+      };
+    }
+
+    /** Draw the preview again, a moment after the last change. */
+    function previewMap() {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(async () => {
+        const mine = ++previewCount;
+        const { block } = await loadConfig();
+        if (block.mapCamera !== true) return;
+        try {
+          const settings = mapSettings(block);
+          if (mapTrying) mapTrying(settings);
+          const res = await homebridge.request("/map/preview", { ...settings, language: lang });
+          if (mine !== previewCount) return; // a newer preview is on its way
+          $("rr-map-img").src = res.image;
+          $("rr-map-note").textContent = t(res.demo ? "map.demo" : "map.yours");
+          mapRooms = res.rooms || [];
+          showRoomColors(block);
+        } catch (e) {
+          if (mine === previewCount) $("rr-map-note").textContent = t("map.previewFailed", { error: errorText(e) });
+        }
+      }, 200);
+    }
+
+    /** One row with a colour box, a name and a button that goes back to the style's colour. */
+    function colorRow(id, name, value, own, onTry, onPick, onReset) {
+      const row = document.createElement("div");
+      row.className = "rr-color-row";
+      const input = document.createElement("input");
+      input.type = "color";
+      input.id = id;
+      input.value = value || "#cccccc";
+      const label = document.createElement("label");
+      label.className = "rr-color-name mb-0";
+      label.htmlFor = id;
+      label.innerHTML = "<bdi>" + esc(name) + "</bdi>";
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "btn btn-outline-secondary btn-sm m-0";
+      reset.textContent = "\u21BA";
+      reset.title = t("map.reset");
+      reset.setAttribute("aria-label", t("map.reset") + ": " + name);
+      reset.style.visibility = own ? "visible" : "hidden";
+      // While a colour is being picked only the preview follows; it is stored when the colour box is closed.
+      input.addEventListener("input", () => {
+        const color = input.value.toLowerCase();
+        mapTrying = (settings) => onTry(settings, color);
+        previewMap();
+      });
+      input.addEventListener("change", () => {
+        mapTrying = null;
+        reset.style.visibility = "visible";
+        onPick(input.value.toLowerCase());
+      });
+      // The colour box was left without a choice being made: the preview goes back to what is stored.
+      input.addEventListener("blur", () => {
+        if (!mapTrying) return;
+        mapTrying = null;
+        previewMap();
+      });
+      reset.addEventListener("click", () => {
+        mapTrying = null;
+        reset.style.visibility = "hidden";
+        onReset();
+      });
+      row.appendChild(input);
+      row.appendChild(label);
+      row.appendChild(reset);
+      return row;
+    }
+
+    async function setMap(change) {
+      const { cfg, block } = await loadConfig();
+      change(block);
+      await commit(cfg);
+      return block;
+    }
+
+    function showThemes(block) {
+      const chosen = mapSettings(block).theme;
+      const box = $("rr-map-themes");
+      box.innerHTML = "";
+      for (const theme of mapThemes.themes) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "rr-theme";
+        button.id = "rr-theme-" + theme.id;
+        button.setAttribute("role", "radio");
+        button.setAttribute("aria-checked", theme.id === chosen ? "true" : "false");
+        const swatch = document.createElement("span");
+        swatch.className = "rr-swatch";
+        for (const color of theme.swatch) {
+          const part = document.createElement("span");
+          part.style.background = color;
+          swatch.appendChild(part);
+        }
+        const name = document.createElement("span");
+        name.textContent = theme.title[lang] || theme.title.en;
+        button.appendChild(swatch);
+        button.appendChild(name);
+        button.addEventListener("click", () => {
+          serial(async () => {
+            const now = await setMap((b) => (b.mapTheme = theme.id));
+            showThemes(now);
+            showOwnColors(now);
+            previewMap();
+          });
+        });
+        box.appendChild(button);
+      }
+    }
+
+    function showOwnColors(block) {
+      const settings = mapSettings(block);
+      const theme = mapThemes.themes.find((th) => th.id === settings.theme) || mapThemes.themes[0];
+      const box = $("rr-map-colors");
+      box.innerHTML = "";
+      for (const key of mapThemes.colorKeys) {
+        const own = settings.colors[key];
+        box.appendChild(
+          colorRow("rr-map-color-" + key, t("map.color." + key), own || theme.colors[key], !!own,
+            (trying, color) => (trying.colors[key] = color),
+            (color) => serial(async () => {
+              await setMap((b) => (b.mapColors = { ...mapSettings(b).colors, [key]: color }));
+              previewMap();
+            }),
+            () => serial(async () => {
+              const now = await setMap((b) => {
+                const colors = mapSettings(b).colors;
+                delete colors[key];
+                b.mapColors = colors; // sent even when empty, see setRoomFan
+              });
+              showOwnColors(now);
+              previewMap();
+            })
+          )
+        );
+      }
+    }
+
+    function showRoomColors(block) {
+      const settings = mapSettings(block);
+      const box = $("rr-map-rooms");
+      // Not while a colour is being picked in it: redrawing would close the colour box.
+      if (box.contains(document.activeElement) && document.activeElement.type === "color") return;
+      box.innerHTML = "";
+      if (!roomNames.length) {
+        box.appendChild(hint(t("map.roomColorsLater")));
+        return;
+      }
+      roomNames.forEach((room, i) => {
+        const own = settings.roomColors.find((r) => norm(r.room) === norm(room));
+        const drawn = mapRooms.find((r) => norm(r.name) === norm(room));
+        const without = (b) => mapSettings(b).roomColors.filter((r) => norm(r.room) !== norm(room));
+        box.appendChild(
+          colorRow("rr-map-room-" + i, room, own ? own.color : drawn ? drawn.color : null, !!own,
+            (trying, color) => (trying.roomColors = trying.roomColors.filter((r) => norm(r.room) !== norm(room)).concat([{ room, color }])),
+            (color) => serial(async () => {
+              await setMap((b) => (b.mapRoomColors = without(b).concat([{ room, color }])));
+              previewMap();
+            }),
+            () => serial(async () => {
+              await setMap((b) => (b.mapRoomColors = without(b)));
+              previewMap();
+            })
+          )
+        );
+      });
+    }
+
+    /** Draw the Map camera card; whatever goes wrong in it, the rest of the page is still shown. */
+    async function showMapCard() {
+      try {
+        await renderMapCard();
+      } catch (e) {
+        $("rr-map-card").style.display = "none";
+      }
+    }
+
+    /** Draw the Map camera card from the stored settings. */
+    async function renderMapCard() {
+      $("rr-map-card").style.display = loggedIn ? "block" : "none";
+      if (!loggedIn) return;
+      if (!mapThemes) {
+        try {
+          mapThemes = await homebridge.request("/map/themes");
+        } catch (e) {
+          $("rr-map-card").style.display = "none"; // an older plugin part is still running: nothing to choose from
+          return;
+        }
+      }
+      const { block } = await loadConfig();
+      const on = block.mapCamera === true;
+      $("rr-map-on").checked = on;
+      $("rr-map-body").style.display = on ? "block" : "none";
+      if (!on) return;
+      const settings = mapSettings(block);
+      showThemes(block);
+      showOwnColors(block);
+      showRoomColors(block);
+      $("rr-map-name").value = block.mapCameraName == null ? "" : block.mapCameraName;
+      $("rr-map-name").placeholder = t("map.namePlaceholder");
+      $("rr-map-rotation").value = String(settings.rotation);
+      $("rr-map-labels").checked = settings.labels;
+      $("rr-map-status").checked = settings.statusBar;
+      previewMap();
+    }
+
+    $("rr-map-on").addEventListener("change", () => {
+      const on = $("rr-map-on").checked;
+      serial(async () => {
+        await setMap((b) => (b.mapCamera = on));
+        await showMapCard();
+      });
+    });
+    $("rr-map-rotation").addEventListener("change", () => {
+      const value = Number($("rr-map-rotation").value) || 0;
+      serial(async () => {
+        await setMap((b) => (b.mapRotation = value));
+        previewMap();
+      });
+    });
+    $("rr-map-labels").addEventListener("change", () => {
+      const on = $("rr-map-labels").checked;
+      serial(async () => {
+        await setMap((b) => (b.mapLabels = on));
+        previewMap();
+      });
+    });
+    $("rr-map-status").addEventListener("change", () => {
+      const on = $("rr-map-status").checked;
+      serial(async () => {
+        await setMap((b) => (b.mapStatus = on));
+        previewMap();
+      });
+    });
+    {
+      let nameTimer = null;
+      const pushName = () => {
+        clearTimeout(nameTimer);
+        nameTimer = null;
+        const value = $("rr-map-name").value.trim();
+        serial(() => setMap((b) => (b.mapCameraName = value || undefined)));
+      };
+      $("rr-map-name").addEventListener("input", () => {
+        clearTimeout(nameTimer);
+        nameTimer = setTimeout(pushName, 300);
+      });
+      $("rr-map-name").addEventListener("change", () => {
+        if (nameTimer) pushName();
+      });
+    }
+
     // ---------- settings form in Hebrew ----------
 
     // In English the regular Homebridge form (made from config.schema.json) is
@@ -858,6 +1274,7 @@
         applyLanguage();
         resetProgramForm((await loadConfig()).block);
         showAccountLine();
+        await showMapCard();
         await showSettingsForm();
       });
     });
@@ -950,6 +1367,7 @@
         $("rr-unsaved").style.display = "none";
         homebridge.toast.success(t("toast.found", { robots: (res.robots || []).join(", ") }), t("toast.loggedIn"));
         await refresh();
+        await showMapCard();
         await showSettingsForm();
       } catch (e) {
         homebridge.toast.error(errorText(e), t("toast.loginFailed"));
@@ -962,6 +1380,7 @@
       await homebridge.request("/logout");
       homebridge.toast.info(t("toast.loggedOut"));
       await refresh();
+      await showMapCard();
     });
 
     // The form below changed (fan or switch name, default passes, "fan for every room"):
@@ -974,6 +1393,7 @@
     lang = (await loadConfig()).block.language === "he" ? "he" : "en";
     applyLanguage();
     await refresh();
+    await showMapCard();
     await showSettingsForm();
   })();
 </script>

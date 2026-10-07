@@ -8,6 +8,7 @@ A Homebridge plugin that adds a **fan in Apple Home for every room on your Robor
 - Change the speed while it cleans and the suction changes live.
 - The fan stays on while the robot cleans and turns off when it's done. Turning it off sends the robot back to the dock.
 - A routine or room clean started from the Roborock app shows in Apple Home too, on its switch or fan.
+- Optional **map camera**: the robot's live map as a camera in Apple Home, in a colour style you choose. See [Map camera](#map-camera).
 - Settings page in English or Hebrew.
 
 It sends the room-clean command straight to the robot, so the room fans do **not** use Roborock routines ("work plans") and the app's **10-routine limit does not apply**.
@@ -80,6 +81,30 @@ The robot does not say which routine it is running, so the plugin reads from the
 - The map is read through the Roborock cloud, normally with a single request per clean.
 - Turn the feature off with `followExternal: false` ("Show cleans started outside Apple Home" under Routine switches).
 
+## Map camera
+
+Turn on **Map camera** in the plugin settings and the robot's map appears in Apple Home as a **camera**: the rooms in colour with their names, the walls, the path the robot drove, where it is now, its dock, the no-go zones from the Roborock app, and a status line (what the robot is doing, battery, area and time of the clean). While rooms are being cleaned, those rooms stand out and the others are toned down.
+
+The plugin reads the map from the robot and draws the picture itself, in plain Node.js. There is no Python, no other plugin and no script behind it.
+
+- **Colour styles**: Roborock, Bright, Night, Pastel, Blueprint, Grey, Sand and Neon. The settings page shows a live preview, drawn from your own map once the plugin has read it.
+- **Your own colours**: replace the background, walls, path, robot, dock and text colours of a style, and give any room its own colour. Rooms you leave alone get colours from the style so that rooms next to each other differ.
+- **Turn the map** in quarter turns, and choose whether the room names and the status line are drawn.
+- The tile in Apple Home shows the latest picture; opening the camera shows the map live while the robot drives.
+
+**Adding it to Apple Home.** Cameras are separate accessories in HomeKit, so the camera is added once by hand: after saving and restarting Homebridge, open the Home app, choose **Add Accessory > More options**, pick the camera (named after the robot, for example "S8 Map") and enter the setup code of this plugin's bridge, the one shown next to the plugin's QR code in Homebridge.
+
+**ffmpeg.** The live view is video, and video is made by `ffmpeg` on the Homebridge computer, as for every camera in Homebridge. It is the one thing the camera uses that is not part of the plugin. The plugin looks for it in this order: the `ffmpegPath` setting, a copy that came with another camera plugin (`ffmpeg-for-homebridge`), the system's own. On a Raspberry Pi it is installed with `sudo apt install -y ffmpeg`. Without ffmpeg the camera still works as a picture that refreshes every few seconds; the log says so at start.
+
+**How often the robot is asked.** Only while somebody is looking: every 5 seconds while the camera is open and the robot is driving (once a minute while it stands still), and each time Apple Home refreshes the tile. One more read is done when a clean ends, so the tile shows the finished clean. The last map is kept on disk, so there is a picture right after a restart.
+
+Good to know:
+
+- The robot sends its map to one viewer at a time. While the Roborock app is open on the map, the camera keeps showing the last map (the status line says from when it is) and catches up when the app is closed.
+- Room names are written in Latin, Greek, Cyrillic and Hebrew letters. A name in another script is left off the map; the room is still drawn.
+- The picture is as wide or as tall as your home, between 3:4 upright and 16:9 wide.
+- Turning `mapCamera` off stops the camera; remove it in the Home app too, or it stays there as "No Response".
+
 ## Language (English / עברית)
 
 The **Language** box at the top of the plugin settings switches the settings page between English (the default) and Hebrew, right-to-left. Hebrew also changes the names the plugin makes up itself for new installs (`ניקוי {room}`, `טעינת S8`). Names you typed and names from the Roborock app are never changed, and the Homebridge log stays in English.
@@ -101,7 +126,16 @@ The **Language** box at the top of the plugin settings switches the settings pag
 | `routines` | — | Routines shown as switches: `[{ "name": "Kitchen" }]`. Managed from the Routines list; the list also saves each routine's `id` |
 | `routineNameTemplate` | `{routine}` | Switch name, `{routine}` = routine name from the Roborock app |
 | `followExternal` | `true` | Show cleans started outside Apple Home on the matching switch or fan |
-| `language` | `en` | `en` or `he` (Hebrew): language of the settings page and of the default names |
+| `language` | `en` | `en` or `he` (Hebrew): language of the settings page, of the default names and of the texts on the map |
+| `mapCamera` | `false` | Add the [map camera](#map-camera) |
+| `mapCameraName` | `<robot> Map` | Name of the camera |
+| `mapTheme` | `roborock` | Colour style: `roborock`, `light`, `dark`, `pastel`, `blueprint`, `mono`, `sand`, `neon` |
+| `mapColors` | — | Own colours on top of the style, as `#rrggbb`: `background`, `walls`, `path`, `robot`, `dock`, `text`, `textBack` |
+| `mapRoomColors` | — | A colour for single rooms: `[{ "room": "Kitchen", "color": "#f6c667" }]` |
+| `mapRotation` | `0` | Turn the map: `0`, `90`, `180` or `270` degrees clockwise |
+| `mapLabels` | `true` | Write the room names on the map |
+| `mapStatus` | `true` | Show the status line |
+| `ffmpegPath` | — | Where ffmpeg is, when it is not found by itself (map camera live view) |
 | `skipDevices` | — | Robots to ignore |
 
 Example:
@@ -129,17 +163,19 @@ Example:
 
 ## Files
 
-Stored in `<homebridge storage>/roborock-room-clean/`: `auth.json` (the Roborock session), `home-cache.json`, `rooms-<robot>.json` and `routines-<robot>.json` (used when the cloud is unreachable at startup). `status-<robot>.json` keeps the last known battery level and dock state.
+Stored in `<homebridge storage>/roborock-room-clean/`: `auth.json` (the Roborock session), `home-cache.json`, `rooms-<robot>.json` and `routines-<robot>.json` (used when the cloud is unreachable at startup). `status-<robot>.json` keeps the last known battery level and dock state, `map-<robot>.bin` the last map read for the map camera, and `listen.json` remembers that Roborock's cloud refused the listening described under [Cleans started outside Apple Home](#cleans-started-outside-apple-home), so it is not tried at every start (it is forgotten when you log out or in). None of these has to be restored for the plugin to work: whatever is missing is read again from Roborock.
 
 ## Credits
 
-Protocol details based on [python-roborock](https://github.com/Python-roborock/python-roborock) and [homebridge-roborock-matter](https://github.com/mathiashornbek/homebridge-roborock-matter). Not affiliated with Roborock.
+Protocol details based on [python-roborock](https://github.com/Python-roborock/python-roborock) and [homebridge-roborock-matter](https://github.com/mathiashornbek/homebridge-roborock-matter). The letters on the map are drawn from [Liberation Sans](https://github.com/liberationfonts) (SIL Open Font License, see `lib/glyphs-LICENSE.txt`). Not affiliated with Roborock.
 
 ## עברית
 
 <div dir="rtl">
 
 התוסף מוסיף לאפליקציית "בית" של Apple מאוורר לכל חדר במפה של שואב Roborock: הדלקת המאוורר מנקה את החדר, ומהירות המאוורר היא עוצמת השאיבה. אפשר להוסיף גם שילובי חדרים, ואת תוכניות העבודה מאפליקציית Roborock כמתגים. תוכנית עבודה שהופעלה מאפליקציית Roborock מוצגת כדלוקה גם ב"בית".
+
+**מצלמת מפה**: בהגדרות התוסף אפשר להוסיף ל"בית" מצלמה שמציגה את המפה של הרובוט: החדרים בצבעים עם השמות שלהם, המסלול שהרובוט עבר, איפה הוא נמצא ושורת מצב. בוחרים סגנון צבעים מתוך שמונה, ואפשר לקבוע צבעים משלך וצבע לכל חדר. התוסף מצייר את המפה בעצמו, בלי תוסף או סקריפט נוסף. את המצלמה מוסיפים ל"בית" פעם אחת: הוסף אביזר > אפשרויות נוספות, בוחרים את המצלמה ומזינים את קוד ההתקנה של הגשר של התוסף.
 
 כדי לעבור לעברית: פתח את הגדרות התוסף ב-Homebridge ובחר **עברית** בתיבה **Language / שפה** שבראש העמוד, לחץ על שמירה והפעל מחדש את Homebridge.
 

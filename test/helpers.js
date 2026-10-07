@@ -112,9 +112,10 @@ function startFakeBroker(robotLog, robot = {}) {
           publish(102, Buffer.from(JSON.stringify({ dps: { 102: JSON.stringify(error ? { id: req.id, error } : { id: req.id, result }) }, t: ts })));
           // The map itself follows the "ok" as a separate message. First one that
           // belongs to another app on the same account (it must be ignored).
-          if (wantsMap && !notReady && robot.cleaning && (!robot.answersMap || robot.answersMap(req))) {
+          if (wantsMap && !notReady && (robot.cleaning || robot.map) && (!robot.answersMap || robot.answersMap(req))) {
             publish(301, mapAnswer(req.id, crypto.randomBytes(16).toString("hex"), fakeMap([99]), "SOMEONE="));
-            publish(301, mapAnswer(req.id, req.security.nonce, fakeMap(robot.cleaning), req.security.endpoint));
+            // `robot.map`: a whole map (with a floor plan) instead of the bare one.
+            publish(301, mapAnswer(req.id, req.security.nonce, robot.map || fakeMap(robot.cleaning), req.security.endpoint));
           }
         }
       }
@@ -136,7 +137,7 @@ function fakeHomebridge(storage) {
     BatteryLevel: "BatteryLevel",
     ChargingState: { NOT_CHARGING: 0, CHARGING: 1 },
     StatusLowBattery: { BATTERY_LEVEL_NORMAL: 0, BATTERY_LEVEL_LOW: 1 },
-    Active: "Active", RotationSpeed: "RotationSpeed", On: "On", Name: "Name", ConfiguredName: "ConfiguredName", Manufacturer: "M", Model: "Mo", SerialNumber: "S" };
+    Active: "Active", RotationSpeed: "RotationSpeed", On: "On", Name: "Name", ConfiguredName: "ConfiguredName", Manufacturer: "M", Model: "Mo", SerialNumber: "S", FirmwareRevision: "F" };
   class Service {
     constructor(name) { this.displayName = name; this.chars = new Map(); }
     getCharacteristic(c) { if (!this.chars.has(c)) this.chars.set(c, new Characteristic(c)); return this.chars.get(c); }
@@ -147,13 +148,26 @@ function fakeHomebridge(storage) {
   }
   const S = { Switch: "Switch", Fanv2: "Fanv2", ContactSensor: "ContactSensor", Battery: "Battery", AccessoryInformation: "Info" };
   class PlatformAccessory {
-    constructor(name, uuid) { this.displayName = name; this.UUID = uuid; this.context = {}; this.services = new Map([["Info", new Service("Info")]]); }
+    constructor(name, uuid, category) { this.displayName = name; this.UUID = uuid; this.category = category; this.context = {}; this.services = new Map([["Info", new Service("Info")]]); }
+    configureController(controller) { this.controller = controller; }
     getService(t) { return this.services.get(t); }
     addService(t, name) { const s = new Service(name); s.type = t; this.services.set(t, s); return s; }
     removeService(svc) { for (const [k, v] of this.services) if (v === svc) this.services.delete(k); }
   }
   const api = new EventEmitter();
-  api.hap = { Service: S, Characteristic: C, uuid: { generate: (s) => require("crypto").createHash("md5").update(s).digest("hex") } };
+  // What a camera needs from Homebridge.
+  class CameraController {
+    constructor(options) { this.options = options; this.forced = []; }
+    static generateSynchronisationSource() { return 0x1234567; }
+    forceStopStreamingSession(id) { this.forced.push(id); }
+  }
+  api.hap = {
+    Service: S, Characteristic: C, uuid: { generate: (s) => require("crypto").createHash("md5").update(s).digest("hex") },
+    Categories: { CAMERA: 17 }, CameraController, SRTPCryptoSuites: { AES_CM_128_HMAC_SHA1_80: 0 },
+    H264Profile: { BASELINE: 0, MAIN: 1, HIGH: 2 }, H264Level: { LEVEL3_1: 0, LEVEL3_2: 1, LEVEL4_0: 2 },
+  };
+  api.external = [];
+  api.publishExternalAccessories = (_p, list) => api.external.push(...list);
   api.platformAccessory = PlatformAccessory;
   api.user = { storagePath: () => storage };
   api.registered = [];
@@ -164,4 +178,31 @@ function fakeHomebridge(storage) {
   return api;
 }
 
-module.exports = { LOCAL_KEY, DUID, RRIOT, fakeMap, mapAnswer, startFakeBroker, fakeHomebridge };
+/** Open a PNG made by lib/canvas.js: { width, height, at(x, y) -> [r, g, b] }. */
+function readPng(png) {
+  if (png.readUInt32BE(0) !== 0x89504e47) throw new Error("not a PNG");
+  let pos = 8;
+  let width = 0, height = 0;
+  const parts = [];
+  while (pos < png.length) {
+    const length = png.readUInt32BE(pos);
+    const type = png.toString("latin1", pos + 4, pos + 8);
+    const body = png.subarray(pos + 8, pos + 8 + length);
+    if (type === "IHDR") { width = body.readUInt32BE(0); height = body.readUInt32BE(4); }
+    if (type === "IDAT") parts.push(body);
+    pos += 12 + length;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(parts));
+  const row = width * 3;
+  const data = Buffer.alloc(row * height);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (row + 1)];
+    for (let x = 0; x < row; x++) {
+      const v = raw[y * (row + 1) + 1 + x];
+      data[y * row + x] = filter === 2 ? (v + data[(y - 1) * row + x]) & 255 : v;
+    }
+  }
+  return { width, height, at: (x, y) => [data[(y * width + x) * 3], data[(y * width + x) * 3 + 1], data[(y * width + x) * 3 + 2]] };
+}
+
+module.exports = { LOCAL_KEY, DUID, RRIOT, fakeMap, mapAnswer, startFakeBroker, fakeHomebridge, readPng };

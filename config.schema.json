@@ -3,7 +3,7 @@
   "pluginType": "platform",
   "singular": true,
   "customUi": true,
-  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. The room fans use no Roborock routines, so the app's 10-routine limit does not apply. The routines you do have in the Roborock app can be added as switches from the Routines list above. A routine or room clean started from the Roborock app shows on its switch or fan too.",
+  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. The room fans use no Roborock routines, so the app's 10-routine limit does not apply. The routines you do have in the Roborock app can be added as switches from the Routines list above. A routine or room clean started from the Roborock app shows on its switch or fan too. The Map camera box adds a camera that shows the robot's map.",
   "schema": {
     "type": "object",
     "properties": {
@@ -266,6 +266,172 @@
         "default": true,
         "description": "When a routine or a room clean is started from the Roborock app, a schedule or another plugin, the matching switch or fan turns on in Apple Home and turns off when the clean ends. It is recognised by the rooms the robot is cleaning."
       },
+      "mapCamera": {
+        "title": "Add a camera that shows the robot's map",
+        "type": "boolean",
+        "default": false,
+        "description": "A camera in Apple Home with the robot's live map: the rooms in colour, the path it drove, where it is now and its status. Read and drawn by this plugin itself, with no other plugin or script (the live view uses ffmpeg). Set it up in the Map camera box above."
+      },
+      "mapCameraName": {
+        "title": "Camera name",
+        "type": "string",
+        "placeholder": "S8 Map",
+        "description": "Default: the robot's name followed by \"Map\"."
+      },
+      "mapTheme": {
+        "title": "Colour style",
+        "type": "string",
+        "default": "roborock",
+        "oneOf": [
+          {
+            "title": "Roborock",
+            "enum": [
+              "roborock"
+            ]
+          },
+          {
+            "title": "Bright",
+            "enum": [
+              "light"
+            ]
+          },
+          {
+            "title": "Night",
+            "enum": [
+              "dark"
+            ]
+          },
+          {
+            "title": "Pastel",
+            "enum": [
+              "pastel"
+            ]
+          },
+          {
+            "title": "Blueprint",
+            "enum": [
+              "blueprint"
+            ]
+          },
+          {
+            "title": "Grey",
+            "enum": [
+              "mono"
+            ]
+          },
+          {
+            "title": "Sand",
+            "enum": [
+              "sand"
+            ]
+          },
+          {
+            "title": "Neon",
+            "enum": [
+              "neon"
+            ]
+          }
+        ]
+      },
+      "mapColors": {
+        "title": "Your own colours",
+        "type": "object",
+        "description": "Colours that replace those of the chosen style, as #rrggbb.",
+        "properties": {
+          "background": {
+            "type": "string",
+            "title": "Background"
+          },
+          "walls": {
+            "type": "string",
+            "title": "Walls"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "robot": {
+            "type": "string",
+            "title": "Robot"
+          },
+          "dock": {
+            "type": "string",
+            "title": "Dock"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "textBack": {
+            "type": "string",
+            "title": "Behind the text"
+          }
+        }
+      },
+      "mapRoomColors": {
+        "title": "A colour for single rooms",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "room": {
+              "title": "Room name (as in the Roborock app)",
+              "type": "string"
+            },
+            "color": {
+              "type": "string",
+              "title": "Colour"
+            }
+          }
+        }
+      },
+      "mapLabels": {
+        "title": "Write the room names on the map",
+        "type": "boolean",
+        "default": true
+      },
+      "mapStatus": {
+        "title": "Show the status line (what the robot is doing, battery)",
+        "type": "boolean",
+        "default": true
+      },
+      "mapRotation": {
+        "title": "Turn the map",
+        "type": "integer",
+        "default": 0,
+        "oneOf": [
+          {
+            "title": "As the robot stores it",
+            "enum": [
+              0
+            ]
+          },
+          {
+            "title": "A quarter turn clockwise",
+            "enum": [
+              90
+            ]
+          },
+          {
+            "title": "Upside down",
+            "enum": [
+              180
+            ]
+          },
+          {
+            "title": "A quarter turn anticlockwise",
+            "enum": [
+              270
+            ]
+          }
+        ]
+      },
+      "ffmpegPath": {
+        "title": "Path to ffmpeg (optional)",
+        "type": "string",
+        "placeholder": "ffmpeg",
+        "description": "Only for the map camera's live view, and only when ffmpeg is not found by itself."
+      },
       "skipDevices": {
         "title": "Robots to ignore (name or device id)",
         "type": "array",
@@ -355,6 +521,7 @@
       "expandable": true,
       "items": [
         "robotIp",
+        "ffmpegPath",
         {
           "key": "skipDevices",
           "type": "array",

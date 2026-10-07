@@ -90,6 +90,7 @@ The plugin reads the map from the robot and draws the picture itself, in plain N
 - **Colour styles**: Roborock, Bright, Night, Pastel, Blueprint, Grey, Sand and Neon. The settings page shows a live preview, drawn from your own map once the plugin has read it.
 - **Your own colours**: replace the background, walls, path, robot, dock and text colours of a style, and give any room its own colour. Rooms you leave alone get colours from the style so that rooms next to each other differ.
 - **Turn the map** in quarter turns, and choose whether the room names and the status line are drawn.
+- **Leave out what lies beyond a virtual wall**: a robot's laser sees through windows and into mirrors, which adds a patch of floor outside the home and makes the home itself smaller in the picture. With this option on, the part of a room that lies beyond a virtual wall drawn in the Roborock app is not drawn. Only a piece of a room is ever left out: a whole room closed off by a virtual wall stays on the map.
 - The tile in Apple Home shows the latest picture; opening the camera shows the map live while the robot drives.
 
 **Adding it to Apple Home.** Cameras are separate accessories in HomeKit, so the camera is added once by hand: after saving and restarting Homebridge, open the Home app, choose **Add Accessory > More options**, pick the camera (named after the robot, for example "S8 Map") and enter the setup code of this plugin's bridge, the one shown next to the plugin's QR code in Homebridge.
@@ -135,6 +136,7 @@ The **Language** box at the top of the plugin settings switches the settings pag
 | `mapRotation` | `0` | Turn the map: `0`, `90`, `180` or `270` degrees clockwise |
 | `mapLabels` | `true` | Write the room names on the map |
 | `mapStatus` | `true` | Show the status line |
+| `mapHideBeyondWalls` | `false` | Leave out the part of a room that lies beyond a virtual wall (for floor "seen" through a window) |
 | `ffmpegPath` | — | Where ffmpeg is, when it is not found by itself (map camera live view) |
 | `skipDevices` | — | Robots to ignore |
 

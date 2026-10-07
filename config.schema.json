@@ -395,6 +395,12 @@
         "type": "boolean",
         "default": true
       },
+      "mapHideBeyondWalls": {
+        "title": "Leave out what lies beyond a virtual wall",
+        "type": "boolean",
+        "default": false,
+        "description": "The part of a room that the robot cannot reach because of a virtual wall drawn in the Roborock app (typically what its laser saw through a window) is not drawn. A whole room behind a virtual wall stays."
+      },
       "mapRotation": {
         "title": "Turn the map",
         "type": "integer",

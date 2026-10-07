@@ -294,6 +294,7 @@ class RoborockRoomCleanPlatform {
         rotation: Number(config.mapRotation) || 0,
         labels: config.mapLabels !== false,
         statusBar: config.mapStatus !== false,
+        hideBeyondWalls: config.mapHideBeyondWalls === true,
         language: config.language === "he" ? "he" : "en",
         size: 1280,
       }),

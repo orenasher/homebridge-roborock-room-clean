@@ -179,6 +179,7 @@ class UiServer extends HomebridgePluginUiServer {
       rotation: p.rotation,
       labels: p.labels !== false,
       statusBar: p.statusBar !== false,
+      hideBeyondWalls: p.hideBeyondWalls === true,
       language,
       size: 960,
       highlight: false,

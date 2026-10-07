@@ -155,6 +155,11 @@
           <input class="form-check-input" type="checkbox" id="rr-map-status" />
           <label class="form-check-label" for="rr-map-status" data-t="map.status">Show the status line (what the robot is doing, battery)</label>
         </div>
+        <div class="form-check rr-field">
+          <input class="form-check-input" type="checkbox" id="rr-map-hide" />
+          <label class="form-check-label" for="rr-map-hide" data-t="map.hide">Leave out what lies beyond a virtual wall</label>
+          <p class="rr-hint" data-t="map.hideHelp"></p>
+        </div>
       </details>
       <p class="rr-hint mt-3 mb-0" data-t="map.addHelp"></p>
     </div>
@@ -262,6 +267,8 @@
         "map.rotation270": "A quarter turn anticlockwise",
         "map.labels": "Write the room names on the map",
         "map.status": "Show the status line (what the robot is doing, battery)",
+        "map.hide": "Leave out what lies beyond a virtual wall",
+        "map.hideHelp": "For floor that is not really there: what the robot's laser saw through a window or in a mirror shows as a patch outside the home and makes the home itself smaller in the picture. Draw a virtual wall across it in the Roborock app, and the part of the room beyond the wall is left off the map. A whole room that is closed off by a virtual wall stays.",
         "map.addHelp": "After pressing Save and restarting Homebridge, add the camera to Apple Home once: Add Accessory > More options, choose the camera and enter the setup code of this plugin's bridge (the code shown next to the plugin's QR code in Homebridge). The live view needs ffmpeg on the Homebridge computer; without it the camera shows a picture that refreshes every few seconds. If you turn the camera off here later, also remove it in the Home app.",
         "map.demo": "This is an example home. Your own map appears here once the camera has been on for a while.",
         "map.yours": "Your robot's map, as the camera will show it.",
@@ -358,6 +365,8 @@
         "map.rotation270": "רבע סיבוב נגד כיוון השעון",
         "map.labels": "כתוב את שמות החדרים על המפה",
         "map.status": "הצג שורת מצב (מה הרובוט עושה, סוללה)",
+        "map.hide": "אל תצייר שטח שנמצא מעבר לקיר וירטואלי",
+        "map.hideHelp": "לשטח שלא באמת קיים: מה שהלייזר של הרובוט ראה דרך חלון או במראה מופיע ככתם מחוץ לבית ומקטין את הבית עצמו בתמונה. כשיש באפליקציית Roborock קיר וירטואלי שחוצה אותו, החלק של החדר שמעבר לקיר לא יצויר. חדר שלם שנחסם בקיר וירטואלי נשאר במפה.",
         "map.addHelp": "אחרי לחיצה על שמירה והפעלה מחדש של Homebridge, הוסף את המצלמה ל\"בית\" פעם אחת: הוסף אביזר > אפשרויות נוספות, בחר את המצלמה והזן את קוד ההתקנה של הגשר של התוסף הזה (הקוד שמופיע ליד קוד ה-QR של התוסף ב-Homebridge). לשידור החי נדרש ffmpeg במחשב של Homebridge; בלעדיו המצלמה מציגה תמונה שמתרעננת כל כמה שניות. אם תכבה כאן את המצלמה בעתיד, הסר אותה גם באפליקציית \"בית\".",
         "map.demo": "זה בית לדוגמה. המפה שלך תופיע כאן אחרי שהמצלמה תפעל זמן מה.",
         "map.yours": "המפה של הרובוט שלך, כפי שהמצלמה תציג אותה.",
@@ -840,6 +849,7 @@
         rotation: [90, 180, 270].includes(Number(block.mapRotation)) ? Number(block.mapRotation) : 0,
         labels: block.mapLabels !== false,
         statusBar: block.mapStatus !== false,
+        hideBeyondWalls: block.mapHideBeyondWalls === true,
       };
     }
 
@@ -1046,6 +1056,7 @@
       $("rr-map-rotation").value = String(settings.rotation);
       $("rr-map-labels").checked = settings.labels;
       $("rr-map-status").checked = settings.statusBar;
+      $("rr-map-hide").checked = settings.hideBeyondWalls;
       previewMap();
     }
 
@@ -1074,6 +1085,13 @@
       const on = $("rr-map-status").checked;
       serial(async () => {
         await setMap((b) => (b.mapStatus = on));
+        previewMap();
+      });
+    });
+    $("rr-map-hide").addEventListener("change", () => {
+      const on = $("rr-map-hide").checked;
+      serial(async () => {
+        await setMap((b) => (b.mapHideBeyondWalls = on));
         previewMap();
       });
     });

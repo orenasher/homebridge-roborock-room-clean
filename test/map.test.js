@@ -13,7 +13,7 @@ const { execFileSync } = require("child_process");
 const cloud = require("../lib/cloud");
 const { parseMap, hasFloorPlan } = require("../lib/rrmap");
 const { cleaningSegments } = require("../lib/map");
-const { makePicture } = require("../lib/picture");
+const { makePicture, statusItems } = require("../lib/picture");
 const { resolveTheme, THEMES, COLOR_KEYS, parseColor } = require("../lib/themes");
 const { visualOrder, Canvas } = require("../lib/canvas");
 const { demoMap, demoRooms } = require("../lib/demo-map");
@@ -157,6 +157,57 @@ test("drawing: a PNG in the chosen colours, rooms next to each other differ", ()
   assert.equal(Canvas.canWrite("חדר שינה (הורים) 2 – Küche Спальня"), true);
 });
 
+test("floor beyond a virtual wall can be left out; a whole room behind one stays", () => {
+  const rooms = demoRooms("en");
+  const kitchen = (png) => {
+    const want = parseColor(THEMES.roborock.rooms[1]);
+    let n = 0;
+    for (let y = 0; y < png.height; y += 2) for (let x = 0; x < png.width; x += 2) if (near(png.at(x, y), want, 1)) n++;
+    return n / (png.width * png.height);
+  };
+  // The laser saw "kitchen" through the window: a patch outside the home, a virtual wall across the window.
+  const ghost = demoMap({ ghost: true });
+  assert.equal(parseMap(ghost).virtualWalls.length, 1);
+  const shown = makePicture(ghost, { rooms, size: 640 });
+  const hidden = makePicture(ghost, { rooms, size: 640, hideBeyondWalls: true });
+  const plain = makePicture(demoMap(), { rooms, size: 640 });
+  assert.ok(shown.height > shown.width, "with the patch the picture is tall");
+  assert.deepEqual([hidden.width, hidden.height], [plain.width, plain.height], "without it the home fills the picture as if the patch was never there");
+  const share = kitchen(readPng(hidden.png));
+  assert.ok(Math.abs(share - kitchen(readPng(plain.png))) < 0.005, "the kitchen itself is all there");
+  assert.equal(hidden.rooms.length, 6);
+  // No virtual wall: the option changes nothing.
+  assert.deepEqual(makePicture(demoMap(), { rooms, size: 640, hideBeyondWalls: true }).png, plain.png);
+
+  // Hand-made walls on the plain home.
+  const withWalls = (...lines) => {
+    const base = demoMap();
+    const data = Buffer.from(new Uint16Array(lines.flat().map((v) => (v + 400) * 50 + 25)).buffer);
+    const head = Buffer.alloc(12);
+    head.writeUInt16LE(10, 0);
+    head.writeUInt16LE(12, 2);
+    head.writeUInt32LE(data.length, 4);
+    head.writeUInt32LE(lines.length, 8);
+    const body = Buffer.concat([base.subarray(20, base.length - 20), head, data]);
+    const start = Buffer.from(base.subarray(0, 20));
+    start.writeUInt32LE(body.length, 4);
+    return Buffer.concat([start, body]);
+  };
+  // A wall across the bedroom door closes off the whole bedroom: a real room, it stays.
+  const closed = makePicture(withWalls([44, 36, 44, 48]), { rooms, size: 640, hideBeyondWalls: true });
+  assert.equal(closed.rooms.length, 6);
+  assert.deepEqual(closed.png, makePicture(withWalls([44, 36, 44, 48]), { rooms, size: 640 }).png);
+  // A wall through the middle of the kitchen: the far part of that room is left out.
+  const split = makePicture(withWalls([74, 80, 130, 80]), { rooms, size: 640, hideBeyondWalls: true });
+  const part = kitchen(readPng(split.png));
+  assert.ok(part > share * 0.45 && part < share * 0.8, `only the near part of the kitchen is drawn (${part} of ${share})`);
+  // A wall that does not close anything off (it ends in the middle of the room): nothing is left out.
+  const open = withWalls([100, 80, 130, 80]);
+  assert.deepEqual(makePicture(open, { rooms, size: 640, hideBeyondWalls: true }).png, makePicture(open, { rooms, size: 640 }).png);
+  // Walls with nonsense coordinates are no problem.
+  assert.doesNotThrow(() => makePicture(withWalls([-399, -399, 900, 900], [5, 5, 5, 5]), { rooms, size: 320, hideBeyondWalls: true }));
+});
+
 test("every colour style is complete", () => {
   assert.ok(Object.keys(THEMES).length >= 6);
   for (const name of Object.keys(THEMES)) {
@@ -179,6 +230,14 @@ test("every colour style is complete", () => {
   // Text that would vanish into its own background gets a background it can be read on.
   const clash = resolveTheme("light", { text: "#ffffff" });
   assert.ok(clash.textBack[0] < 60);
+});
+
+test("the status line: what the robot does, battery, and the area only once there is some", () => {
+  const texts = (status, language = "en") => statusItems(status, null, [], { language }).map((i) => i.text);
+  assert.deepEqual(texts({ state: 18, battery: 98, clean_area: 12.4e6, clean_time: 845 }), ["Cleaning", "98%", "12 m² · 14 min"]);
+  assert.deepEqual(texts({ state: 6, battery: 98, clean_area: 0.2e6, clean_time: 180 }, "he"), ["חוזר לעגינה", "98%", "3 דק׳"]);
+  assert.deepEqual(texts({ state: 8, battery: 100, clean_area: 12e6, clean_time: 845 }), ["Charging", "100%"]);
+  assert.deepEqual(texts(null), []);
 });
 
 test("Hebrew is written right to left, numbers and Latin words stay readable", () => {

@@ -69,6 +69,7 @@ A routine pressed in the Roborock app, a scheduled routine or a room clean start
 
 The robot does not say which routine it is running, so the plugin reads from the robot's live map which rooms are being cleaned and compares them with the rooms saved in each routine. When two routines clean the same rooms, the one whose suction and water settings the robot is using is picked. When the robot is reachable on the home network this takes a few seconds: the robot reports by itself that it started, and the plugin then reads its status every few seconds until it knows what is running. Otherwise it shows at the next regular status check. A whole-home clean that has a whole-home routine switch needs no map at all. Notes:
 
+- A fan that shows such a clean shows the suction the robot is really using. The speed the fan remembers for cleans started from Apple Home is not changed, and comes back when the clean ends.
 - Only routines you ticked in the Routines list have a switch to show it on. A room clean that matches no routine shows on the fan (or combination) for exactly those rooms.
 - A whole-home clean shows on a routine that cleans the whole home. Zone cleans are not shown.
 - The rooms of each routine are read when Homebridge starts: restart Homebridge after changing a routine in the Roborock app.

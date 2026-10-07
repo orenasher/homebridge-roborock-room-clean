@@ -877,7 +877,7 @@ class RoborockRoomCleanPlatform {
     // How long it took, counted from the robot's own report that it started (when there was one).
     const took = monitor.reportedAt ? ` ${Math.max(1, Math.round((Date.now() - monitor.reportedAt) / 1000))}s after the robot reported it.` : "";
     this.log.info(`${match.name}: started outside Apple Home (${what}), showing it as on.${took}`);
-    this.adopt(match);
+    this.adopt(match, status);
   }
 
   /**
@@ -918,13 +918,41 @@ class RoborockRoomCleanPlatform {
   }
 
   /** Show a clean that is already running on its switch or fan, and follow it until it ends. */
-  adopt(program) {
+  adopt(program, status) {
     program.adopted = true;
     program.restore = null; // the settings are not ours to put back
     program.startedAt = 0; // already cleaning: no start-up grace
     program.idlePolls = 0;
+    this.showSuction(program, status);
     this.setRunning(program, true);
     this.schedulePoll(program, 20000);
+  }
+
+  /** The slider level for a suction code of the robot, or null when the slider has no place for it. */
+  levelOf(fanPower) {
+    const level = Object.keys(SUCTION).find((name) => SUCTION[name] === fanPower);
+    if (!level) return null;
+    return this.levels().includes(level) ? level : "max"; // Max+ without the Max+ step: the top of the slider
+  }
+
+  /**
+   * A fan that shows a clean started elsewhere shows the suction the robot is
+   * really using, not the speed remembered for cleans started from Home.
+   * That remembered speed is left alone and comes back when the clean ends.
+   */
+  showSuction(program, status) {
+    if (program.kind === "routine" || !program.adopted) return;
+    // A level just picked in Home stands until the robot's status has caught up with it.
+    if (Date.now() - (program.shownByUser || 0) < 30000) return;
+    const level = status ? this.levelOf(status.fan_power) : null;
+    if (!level || level === program.shown) return;
+    program.shown = level;
+    if (program.running) this.setRunning(program, true);
+  }
+
+  /** The level a fan's slider is at: the robot's own while it shows an outside clean, else the remembered one. */
+  sliderLevel(program) {
+    return (program.adopted && program.running && program.shown) || program.accessory.context.level;
   }
 
   // ---------- fan speed ----------
@@ -1010,13 +1038,23 @@ class RoborockRoomCleanPlatform {
 
     const speed = service.getCharacteristic(Characteristic.RotationSpeed);
     speed.setProps({ minValue: 0, maxValue: 100, minStep: this.speedStep() });
-    speed.onGet(() => this.levelToSpeed(accessory.context.level));
+    speed.onGet(() => this.levelToSpeed(this.sliderLevel(program)));
     speed.onSet((value) => {
       if (value <= 0) {
         this.requestStop(program);
         return;
       }
       const level = this.speedToLevel(value);
+      if (program.adopted && program.running) {
+        // A clean started elsewhere: change the robot's suction, but keep the
+        // speed this fan remembers for cleans started from Home.
+        if (level !== program.shown) {
+          program.shown = level;
+          program.shownByUser = Date.now();
+          this.changeSuction(program, level);
+        }
+        return;
+      }
       const changed = level !== accessory.context.level;
       accessory.context.level = level;
       this.api.updatePlatformAccessories?.([accessory]);
@@ -1068,7 +1106,8 @@ class RoborockRoomCleanPlatform {
       return;
     }
     program.service.updateCharacteristic(Characteristic.Active, running ? 1 : 0);
-    program.service.updateCharacteristic(Characteristic.RotationSpeed, this.levelToSpeed(program.accessory.context.level));
+    if (!running) program.shown = null;
+    program.service.updateCharacteristic(Characteristic.RotationSpeed, this.levelToSpeed(this.sliderLevel(program)));
   }
 
   /** Only one fan or routine per robot can run at a time: switch the others off. */
@@ -1196,6 +1235,7 @@ class RoborockRoomCleanPlatform {
       return;
     }
     if (status.in_cleaning) program.idlePolls = 0;
+    this.showSuction(program, status); // suction changed in the Roborock app meanwhile
     this.schedulePoll(program, 20000);
   }
 

@@ -193,6 +193,26 @@ test("an outside room clean shows on the fan for those rooms; the plugin's own c
   const kitchen = byName("Clean מטבח");
   assert.equal(kitchen.running, true, "the kitchen fan is on");
   assert.equal(kitchen.service.getCharacteristic("Active").value, 1);
+  // The slider shows the suction the robot is really using (Balanced), not the fan's own Max.
+  const slider = kitchen.service.getCharacteristic("RotationSpeed");
+  assert.equal(slider.value, 50);
+  assert.equal(await slider.getFn(), 50);
+  assert.equal(kitchen.accessory.context.level, "max", "the speed remembered for cleans from Home is untouched");
+  // Suction changed in the Roborock app: the slider follows at the next check.
+  robot.status = { ...robot.status, fan_power: 103 };
+  platform.monitors.get(DUID).full = null;
+  await platform.poll(kitchen);
+  assert.equal(slider.value, 75);
+  // Moved in Home: the robot's suction changes, the remembered speed still does not.
+  slider.setFn(25);
+  await wait(300);
+  assert.deepEqual(robotLog.filter((r) => r.method === "set_custom_mode").map((r) => r.params), [[101]]);
+  assert.equal(await slider.getFn(), 25);
+  assert.equal(kitchen.accessory.context.level, "max");
+  platform.monitors.get(DUID).full = null;
+  await platform.poll(kitchen); // the robot's status still says 103 for a moment: the pick from Home stands
+  assert.equal(await slider.getFn(), 25);
+  robotLog.length = 0;
   assert.equal(byName("Clean סלון").running, false);
   assert.equal(byName("הכול").running, false);
 
@@ -204,6 +224,7 @@ test("an outside room clean shows on the fan for those rooms; the plugin's own c
   await wait(3200);
   assert.equal(salon.running, true);
   assert.equal(kitchen.running, false, "only one fan per robot is on");
+  assert.equal(await slider.getFn(), 100, "off again: the kitchen fan is back at its own speed");
   robot.status = { state: 8, in_cleaning: 0, fan_power: 104, water_box_mode: 200, battery: 80 };
   platform.monitors.get(DUID).full = null;
   await platform.readStatus(DUID, salon.channel);

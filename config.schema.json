@@ -395,11 +395,16 @@
         "type": "boolean",
         "default": true
       },
+      "mapCarpets": {
+        "title": "Mark carpets (fine stripes)",
+        "type": "boolean",
+        "default": true
+      },
       "mapHideBeyondWalls": {
         "title": "Leave out what lies beyond a virtual wall",
         "type": "boolean",
         "default": false,
-        "description": "The part of a room that the robot cannot reach because of a virtual wall drawn in the Roborock app (typically what its laser saw through a window) is not drawn. A whole room behind a virtual wall stays."
+        "description": "What lies beyond a virtual wall drawn in the Roborock app is not drawn: the part of a room the robot cannot reach because of the wall, or a patch of floor that its laser saw through a window. A whole room behind a virtual wall stays."
       },
       "mapRotation": {
         "title": "Turn the map",

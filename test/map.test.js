@@ -11,7 +11,7 @@ const crypto = require("crypto");
 const zlib = require("zlib");
 const { execFileSync } = require("child_process");
 const cloud = require("../lib/cloud");
-const { parseMap, hasFloorPlan } = require("../lib/rrmap");
+const { parseMap, hasFloorPlan, carpetOf } = require("../lib/rrmap");
 const { cleaningSegments } = require("../lib/map");
 const { makePicture, statusItems } = require("../lib/picture");
 const { resolveTheme, THEMES, COLOR_KEYS, parseColor } = require("../lib/themes");
@@ -176,8 +176,30 @@ test("floor beyond a virtual wall can be left out; a whole room behind one stays
   const share = kitchen(readPng(hidden.png));
   assert.ok(Math.abs(share - kitchen(readPng(plain.png))) < 0.005, "the kitchen itself is all there");
   assert.equal(hidden.rooms.length, 6);
+  assert.equal(hidden.beyond.walls, 1);
+  assert.ok(hidden.beyond.cells > 1000);
+  assert.equal(shown.beyond, null, "nothing is reported while the option is off");
   // No virtual wall: the option changes nothing.
-  assert.deepEqual(makePicture(demoMap(), { rooms, size: 640, hideBeyondWalls: true }).png, plain.png);
+  const none = makePicture(demoMap(), { rooms, size: 640, hideBeyondWalls: true });
+  assert.deepEqual(none.png, plain.png);
+  assert.deepEqual(none.beyond, { walls: 0, cells: 0 });
+
+  // The usual case on a real robot: the window is a wall on the map, so the patch is joined to the
+  // home by no floor at all. A virtual wall along the window, longer than the patch is wide there, takes it away.
+  const window = demoMap({ ghost: "window" });
+  const through = makePicture(window, { rooms, size: 640, hideBeyondWalls: true });
+  assert.deepEqual([through.width, through.height], [plain.width, plain.height]);
+  assert.ok(Math.abs(kitchen(readPng(through.png)) - kitchen(readPng(plain.png))) < 0.005);
+  assert.ok(through.beyond.cells > 1000);
+  // The same patch with a wall that is too short: it still hangs on to the home past the wall's ends and stays.
+  const tooShort = Buffer.from(window);
+  const at = tooShort.indexOf(Buffer.from(new Uint16Array([(86 + 400) * 50 + 25]).buffer), tooShort.length - 60);
+  assert.ok(at > 0);
+  tooShort.writeUInt16LE((97 + 400) * 50 + 25, at);
+  tooShort.writeUInt16LE((103 + 400) * 50 + 25, at + 4);
+  const stays = makePicture(tooShort, { rooms, size: 640, hideBeyondWalls: true });
+  assert.deepEqual(stays.beyond, { walls: 1, cells: 0 });
+  assert.deepEqual([stays.width, stays.height], [shown.width, shown.height]);
 
   // Hand-made walls on the plain home.
   const withWalls = (...lines) => {
@@ -201,11 +223,34 @@ test("floor beyond a virtual wall can be left out; a whole room behind one stays
   const split = makePicture(withWalls([74, 80, 130, 80]), { rooms, size: 640, hideBeyondWalls: true });
   const part = kitchen(readPng(split.png));
   assert.ok(part > share * 0.45 && part < share * 0.8, `only the near part of the kitchen is drawn (${part} of ${share})`);
+  // A wall through the room the dock is in: the part of that room on the other side goes, every other room stays whole.
+  const dockSide = makePicture(withWalls([1, 84, 77, 84]), { rooms, size: 640, hideBeyondWalls: true });
+  assert.ok(dockSide.beyond.cells > 2000);
+  assert.equal(dockSide.rooms.length, 6);
+  assert.ok(Math.abs(kitchen(readPng(dockSide.png)) - share) < 0.01, "the kitchen is untouched");
   // A wall that does not close anything off (it ends in the middle of the room): nothing is left out.
   const open = withWalls([100, 80, 130, 80]);
   assert.deepEqual(makePicture(open, { rooms, size: 640, hideBeyondWalls: true }).png, makePicture(open, { rooms, size: 640 }).png);
   // Walls with nonsense coordinates are no problem.
   assert.doesNotThrow(() => makePicture(withWalls([-399, -399, 900, 900], [5, 5, 5, 5]), { rooms, size: 320, hideBeyondWalls: true }));
+});
+
+test("carpets are marked, remembered from the last map that had them, and can be turned off", () => {
+  const rooms = demoRooms("en");
+  const withCarpet = demoMap({ carpet: true });
+  const carpet = carpetOf(withCarpet);
+  assert.deepEqual([carpet.width, carpet.height, carpet.left, carpet.top], [131, 101, 400, 400]);
+  assert.equal(carpetOf(demoMap()), null);
+  assert.equal(carpetOf(Buffer.from("rubbish")), null);
+  const bare = makePicture(demoMap(), { rooms, size: 480 });
+  const marked = makePicture(withCarpet, { rooms, size: 480 });
+  assert.notDeepEqual(marked.png, bare.png);
+  assert.deepEqual(makePicture(withCarpet, { rooms, size: 480, carpets: false }).png, bare.png);
+  // A map without carpets is drawn with the ones seen before - if it is the same floor plan.
+  assert.deepEqual(makePicture(demoMap(), { rooms, size: 480, lastCarpet: carpet }).png, marked.png);
+  assert.deepEqual(makePicture(demoMap(), { rooms, size: 480, lastCarpet: carpet, carpets: false }).png, bare.png);
+  assert.deepEqual(makePicture(demoMap(), { rooms, size: 480, lastCarpet: { ...carpet, width: 130 } }).png, bare.png);
+  assert.deepEqual(makePicture(demoMap(), { rooms, size: 480, lastCarpet: { ...carpet, data: carpet.data.subarray(0, 50) } }).png, bare.png);
 });
 
 test("every colour style is complete", () => {
@@ -385,6 +430,29 @@ test("the map is only asked for while somebody is looking, and is kept over a re
   const fresh = new MapView({ log: quiet, name: "Map", channel: silent, painter, file: path.join(dir, "none.bin"), options: () => ({ size: 320 }), status: () => null });
   for (let n = 0; n < 6; n++) assert.ok(await fresh.snapshot(), "there is always a picture, even if it says there is no map yet");
   assert.equal(silent.asked, 1);
+
+  // Carpets: the robot sends them only now and then; the view goes on drawing the last ones it saw.
+  const rugs = fakeChannel();
+  rugs.map = demoMap({ carpet: true });
+  const lines = [];
+  const rugView = new MapView({ log: { ...quiet, info: (m) => lines.push(m) }, name: "Map", channel: rugs, painter, file: path.join(dir, "rugs.bin"), options: () => ({ size: 320, hideBeyondWalls: true }), status: () => null });
+  rugs.onMap = (map) => rugView.offer(map);
+  const withRug = await rugView.snapshot();
+  rugs.map = demoMap({ cleaning: [16] });
+  rugView.nextFetchAt = 0;
+  const later = await rugView.snapshot();
+  assert.notEqual(later, withRug);
+  assert.deepEqual(later, makePicture(demoMap({ cleaning: [16] }), { size: 320, lastCarpet: carpetOf(demoMap({ carpet: true })), mapAt: 1, now: 1 }).png);
+  // What the "beyond a virtual wall" setting came to is said in the log, once per change.
+  assert.deepEqual(lines.filter((m) => /virtual wall/.test(m)).length, 1);
+  assert.match(lines.find((m) => /virtual wall/.test(m)), /has no virtual wall/);
+  rugs.map = demoMap({ ghost: "window" });
+  rugView.nextFetchAt = 0;
+  await rugView.snapshot();
+  rugView.nextFetchAt = 0;
+  await rugView.snapshot();
+  assert.equal(lines.filter((m) => /m² of floor beyond them is left off/.test(m)).length, 1, lines.join("\n"));
+  rugView.close();
 
   // A picture that cannot be drawn: said once, not tried again until something changes, and the camera is never without a picture.
   const warned = [];

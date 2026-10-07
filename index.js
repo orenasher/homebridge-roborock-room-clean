@@ -295,6 +295,7 @@ class RoborockRoomCleanPlatform {
         labels: config.mapLabels !== false,
         statusBar: config.mapStatus !== false,
         hideBeyondWalls: config.mapHideBeyondWalls === true,
+        carpets: config.mapCarpets !== false,
         language: config.language === "he" ? "he" : "en",
         size: 1280,
       }),

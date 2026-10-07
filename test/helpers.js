@@ -48,6 +48,16 @@ function startFakeBroker(robotLog, robot = {}) {
   const server = net.createServer((sock) => {
     let buf = Buffer.alloc(0);
     const send = (type, body) => sock.write(Buffer.concat([Buffer.from([type, body.length]), body]));
+    // Lets a test play another app on the account: a message every connected client receives.
+    robot.deliver = (topic, frame) => {
+      const t = Buffer.alloc(2); t.writeUInt16BE(Buffer.byteLength(topic));
+      const pub = Buffer.concat([t, Buffer.from(topic), frame]);
+      const lenBytes = [];
+      let L = pub.length;
+      do { let x = L % 128; L = Math.floor(L / 128); if (L) x |= 0x80; lenBytes.push(x); } while (L);
+      sock.write(Buffer.concat([Buffer.from([0x30, ...lenBytes]), pub]));
+    };
+    robot.subscribed = robot.subscribed || [];
     sock.on("data", (d) => {
       buf = Buffer.concat([buf, d]);
       while (buf.length >= 2) {
@@ -58,13 +68,20 @@ function startFakeBroker(robotLog, robot = {}) {
         buf = buf.subarray(i + len);
         const type = h >> 4;
         if (type === 1) send(0x20, Buffer.from([0, 0]));
-        else if (type === 8) send(0x90, Buffer.concat([body.subarray(0, 2), Buffer.from([1])]));
+        else if (type === 8) {
+          const wanted = body.toString("utf8", 4, 4 + body.readUInt16BE(2));
+          const refused = robot.refuseListen && wanted.startsWith("rr/m/i/");
+          if (!refused) robot.subscribed.push(wanted);
+          send(0x90, Buffer.concat([body.subarray(0, 2), Buffer.from([refused ? 0x80 : 1])]));
+        }
         else if (type === 12) send(0xd0, Buffer.alloc(0));
         else if (type === 3) {
           const qos = (h >> 1) & 3;
           const tl = body.readUInt16BE(0);
           const topic = body.toString("utf8", 2, 2 + tl);
           const frame = body.subarray(2 + tl + (qos ? 2 : 0));
+          // A real broker also hands a request to everyone listening on that topic: the sender included.
+          if (robot.subscribed.some((t) => t.startsWith("rr/m/i/"))) robot.deliver(topic, Buffer.from(frame));
           const msg = P.decodeMessage(frame, LOCAL_KEY);
           const req = JSON.parse(JSON.parse(msg.payload.toString()).dps["101"]);
           robotLog.push(req);

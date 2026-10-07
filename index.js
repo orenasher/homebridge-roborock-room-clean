@@ -69,7 +69,7 @@ class RoborockRoomCleanPlatform {
     // robot sends the map to one viewer at a time: while the Roborock app is
     // open on its map it does not answer us, so the attempts go on for a few
     // minutes, until the app is closed or the phone is locked.
-    this.externalWaits = [0, 8000, 8000, 15000, 15000, 30000, 30000, 60000, 60000, 60000];
+    this.externalWaits = [0, 5000, 5000, 5000, 5000, 10000, 10000, 10000, 10000, 15000, 15000, 15000, 15000, 20000, 20000, 20000, 30000, 30000, 30000, 30000];
     this.dockRetryMs = 4000; // wait before asking a robot that refused to go to the dock again
     this.ready = false; // true once every fan and switch exists
 
@@ -159,7 +159,7 @@ class RoborockRoomCleanPlatform {
 
     const roomNames = new Map((home.rooms || []).map((r) => [String(r.id), r.name]));
     this.auth = auth;
-    this.session = new RoborockSession(auth.userData, this.log);
+    this.session = new RoborockSession(auth.userData, this.log, { overhear: this.config.followExternal !== false });
     this.session.start();
 
     const wanted = new Set();
@@ -770,12 +770,19 @@ class RoborockRoomCleanPlatform {
   watchExternal(monitor, status) {
     if (!status.in_cleaning) {
       monitor.job = null;
-      if (RoborockRoomCleanPlatform.isCharging(status)) monitor.reportedAt = 0;
+      // The robot's report led to no clean (back on the dock, or the quick checks ran out): forget when it came.
+      if (RoborockRoomCleanPlatform.isCharging(status) || Date.now() > monitor.closeUntil) monitor.reportedAt = 0;
       return;
     }
     // Not every fan and switch exists yet (Homebridge is starting): look again at the next status.
     if (!this.ready) return;
     const duid = monitor.robot.duid;
+    // An unfinished clean of a robot that is standing still (an error, paused,
+    // charging in between) is not shown as running: look again once it moves.
+    if (!monitor.job && !CLEANING_STATES.has(status.state) && !this.busy(duid)) {
+      if (Date.now() > monitor.closeUntil) monitor.reportedAt = 0;
+      return;
+    }
     if (monitor.job) {
       // A clean of ours that was stopped a while ago, no fan or switch is on,
       // and the robot is cleaning again: that is a new clean, started elsewhere.
@@ -835,7 +842,7 @@ class RoborockRoomCleanPlatform {
         if (this.externalWaits[attempt - 1]) await sleep(this.externalWaits[attempt - 1]);
         if (!current()) return dropped();
         try {
-          const answer = await channel.getCleaning(8000, attempt);
+          const answer = await channel.getCleaning(5000, attempt);
           if (answer.rooms.length) rooms = answer.rooms;
           else reasons.push(`the map marks no rooms (it has blocks ${answer.blocks.join(",")})`);
         } catch (err) {
@@ -876,6 +883,7 @@ class RoborockRoomCleanPlatform {
     }
     // How long it took, counted from the robot's own report that it started (when there was one).
     const took = monitor.reportedAt ? ` ${Math.max(1, Math.round((Date.now() - monitor.reportedAt) / 1000))}s after the robot reported it.` : "";
+    monitor.reportedAt = 0;
     this.log.info(`${match.name}: started outside Apple Home (${what}), showing it as on.${took}`);
     this.adopt(match, status);
   }

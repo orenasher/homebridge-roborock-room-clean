@@ -514,6 +514,150 @@ test("the map comes only after a while (the Roborock app was open): the tries go
   run.stop();
 });
 
+test("the map is tried over the home network first; a robot that sends none there is asked through the cloud", async () => {
+  // A robot that sends its map over the home network: the cloud is not asked at all.
+  let robot = { status: { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [16] };
+  let run = await startPlatform({}, robot);
+  let channel = run.platform.monitors.get(DUID).channel;
+  let localMaps = 0;
+  channel.local = {
+    host: "10.0.0.9",
+    socket: {},
+    connect: async () => {},
+    close() {},
+    send: async (method) => ({ result: method === "get_status" ? [robot.status] : ["ok"] }),
+    sendMap: async (security) => {
+      localMaps++;
+      return mapAnswer(1, security.nonce, fakeMap([17]), security.endpoint);
+    },
+  };
+  await wait(2800);
+  assert.equal(run.byName("Clean מטבח").running, true, run.logs.join("\n"));
+  assert.equal(localMaps, 1);
+  assert.equal(run.robotLog.filter((r) => r.method === "get_map_v1").length, 0, "nothing asked through the cloud");
+  assert.ok(run.logs.some((l) => l.includes("the map is read over the home network")));
+  run.stop();
+
+  // A robot that answers nothing there: said once, remembered, and the cloud is used from then on.
+  robot = { status: { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [17] };
+  run = await startPlatform({}, robot);
+  channel = run.platform.monitors.get(DUID).channel;
+  localMaps = 0;
+  channel.local = {
+    host: "10.0.0.9",
+    socket: {},
+    connect: async () => {},
+    close() {},
+    send: async (method) => ({ result: method === "get_status" ? [robot.status] : ["ok"] }),
+    sendMap: async () => {
+      localMaps++;
+      throw new Error("get_map_v1: no answer from 10.0.0.9");
+    },
+  };
+  await wait(2800);
+  assert.equal(run.byName("Clean מטבח").running, true, run.logs.join("\n"));
+  assert.deepEqual(await channel.getCleaningSegments(2000, 1), [17]);
+  assert.equal(localMaps, 1, "the home network is not asked for a map again");
+  assert.equal(run.logs.filter((l) => l.includes("no map over the home network")).length, 1);
+  run.stop();
+});
+
+test("an unfinished clean of a robot that is standing still is not shown as running", async () => {
+  // In an error state with a room clean unfinished, as after getting stuck.
+  const robot = { status: { state: 12, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 60 }, cleaning: [17] };
+  const run = await startPlatform({}, robot);
+  await wait(2800);
+  assert.ok([...run.platform.programs.values()].every((p) => !p.running));
+  assert.equal(run.robotLog.filter((r) => r.method === "get_map_v1").length, 0);
+  // Freed and cleaning again: now it shows.
+  robot.status = { ...robot.status, state: 18 };
+  const monitor = run.platform.monitors.get(DUID);
+  monitor.full = null;
+  await run.platform.readStatus(DUID, monitor.channel);
+  await wait(400);
+  assert.equal(run.byName("Clean מטבח").running, true);
+  run.stop();
+});
+
+test("while the Roborock app is open the robot answers only the app: the plugin reads the map sent to the app", async () => {
+  const P = require("../lib/protocol");
+  const mqttUser = P.md5hex(`${RRIOT.u}:${RRIOT.k}`).substring(2, 10);
+  const inTopic = `rr/m/i/${RRIOT.u}/${mqttUser}/${DUID}`;
+  const outTopic = `rr/m/o/${RRIOT.u}/${mqttUser}/${DUID}`;
+  const ts = Math.floor(Date.now() / 1000);
+  const appNonce = "00112233445566778899aabbccddeeff";
+  // What the app sends when its map screen opens, and what the robot answers it.
+  const appAsks = () => robot.deliver(inTopic, P.encodeMessage({ localKey: LOCAL_KEY, protocol: 101, ts, payload: P.buildRpcPayload("get_map_v1", [], 4242, ts, { endpoint: "APPxyz12", nonce: appNonce }) }));
+  const robotAnswersApp = (rooms) => robot.deliver(outTopic, P.encodeMessage({ localKey: LOCAL_KEY, protocol: 301, ts, payload: mapAnswer(4242, appNonce, fakeMap(rooms), "APPxyz12") }));
+
+  // The robot never answers the plugin's own map requests in this test.
+  const robot = { status: { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [17], answersMap: () => false };
+  const run = await startPlatform({}, robot);
+  run.platform.externalWaits = [0, 300, 300, 300, 300, 300, 300, 300];
+  const channel = run.platform.monitors.get(DUID).channel;
+  const original = channel.getMap.bind(channel);
+  channel.getMap = (ms, attempt) => original(250, attempt);
+  await wait(2400);
+  assert.ok(robot.subscribed.some((t) => t.startsWith("rr/m/i/")), "the plugin listens to the requests on the account channel");
+
+  // The user opens the app and starts the kitchen from it; the app keeps showing its map.
+  appAsks();
+  await wait(100);
+  assert.equal(channel.otherKeys.length, 1);
+  robot.status = { ...robot.status, state: 18, in_cleaning: 3 };
+  const monitor = run.platform.monitors.get(DUID);
+  monitor.full = null;
+  await run.platform.readStatus(DUID, channel);
+  await wait(500);
+  assert.equal(run.byName("Clean מטבח").running, false, "nothing to go on yet");
+  robotAnswersApp([17]);
+  await wait(500);
+  assert.equal(run.byName("Clean מטבח").running, true, run.logs.join("\n"));
+  assert.ok(run.logs.some((l) => l.includes("reading that map")), run.logs.join("\n"));
+  assert.equal(channel.mapShared, null, "an overheard map says nothing about how our own requests fare");
+  // The plugin's own requests on that channel are not mistaken for another app's.
+  assert.equal(channel.otherKeys.length, 1);
+
+  // A map answer for an app whose request was never seen is not kept.
+  channel.stash = null;
+  robot.deliver(outTopic, P.encodeMessage({ localKey: LOCAL_KEY, protocol: 301, ts, payload: mapAnswer(7, "ffffffffffffffffffffffffffffffff", fakeMap([16]), "OTHERapp") }));
+  await wait(100);
+  assert.equal(channel.stash, null);
+  // The app looks at the map of an old clean: its key is known, but that answer is not the live map.
+  robot.deliver(inTopic, P.encodeMessage({ localKey: LOCAL_KEY, protocol: 101, ts, payload: P.buildRpcPayload("get_clean_record_map", [3], 5151, ts, { endpoint: "APPxyz12", nonce: appNonce }) }));
+  await wait(50);
+  robot.deliver(outTopic, P.encodeMessage({ localKey: LOCAL_KEY, protocol: 301, ts, payload: mapAnswer(5151, appNonce, fakeMap([16]), "APPxyz12") }));
+  await wait(100);
+  assert.equal(channel.stash, null, "the map of an old clean is not taken for the live one");
+  // With nobody waiting, a live map for the app is only kept, and opened when one is wanted.
+  robotAnswersApp([16, 17]);
+  await wait(100);
+  assert.ok(channel.stash && channel.stash.map === undefined, "kept unopened");
+  assert.deepEqual(await channel.getCleaningSegments(500, 1), [16, 17]);
+  run.stop();
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});
+
+test("a cloud that does not allow listening to other apps' requests: said once, everything else works", async () => {
+  const robot = { status: { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [17], refuseListen: true };
+  const run = await startPlatform({}, robot);
+  await wait(2800);
+  assert.equal(run.logs.filter((l) => l.includes("does not let this plugin see other apps' map requests")).length, 1, run.logs.join("\n"));
+  assert.equal(run.byName("Clean מטבח").running, true, "its own map request is answered as before");
+  assert.ok(!run.platform.session.client.subscriptions.has(robot.subscribed.find((t) => t.startsWith("rr/m/i/")) || "rr/m/i/x"), "and it is not asked for again");
+  assert.equal([...run.platform.session.client.subscriptions].filter((t) => t.startsWith("rr/m/i/")).length, 0);
+  run.stop();
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});
+
+test("with the feature off the plugin does not listen to other apps", async () => {
+  const robot = {};
+  const run = await startPlatform({ followExternal: false }, robot);
+  await wait(300);
+  assert.ok(!(robot.subscribed || []).some((t) => t.startsWith("rr/m/i/")));
+  run.stop();
+});
+
 test("language: Hebrew gives Hebrew default names, typed names are kept", async () => {
   const robot = {};
   let run = await startPlatform({ language: "he" }, robot);

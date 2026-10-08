@@ -456,6 +456,21 @@ test("map requests: own endpoint and one key, the account's endpoint as second w
   assert.equal(channel.mapShared, true);
   run.stop();
 
+  // The robot stops answering the way that worked: after a few misses every way is tried again, with a
+  // new key of our own, and maps come back without a restart.
+  robot = { cleaning: [17], answersMap: (req) => req.security.endpoint !== account };
+  run = await startPlatform({}, robot);
+  channel = run.platform.monitors.get(DUID).channel;
+  assert.deepEqual(await channel.getCleaningSegments(2000, 1), [17]);
+  assert.equal(channel.mapShared, false);
+  const firstKey = run.robotLog.find((r) => r.method === "get_map_v1").security.nonce;
+  robot.answersMap = (req) => req.security.endpoint === account && req.security.nonce !== firstKey;
+  let got = null;
+  for (let attempt = 2; attempt <= 8 && !got; attempt++) got = await channel.getMap(300, attempt).catch(() => null);
+  assert.ok(got, "the map came back");
+  assert.equal(channel.mapShared, true);
+  run.stop();
+
   // "retry" twice, then the map.
   robot = { cleaning: [16], retries: 2 };
   run = await startPlatform({}, robot);

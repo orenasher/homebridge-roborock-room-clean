@@ -3,7 +3,7 @@
   "pluginType": "platform",
   "singular": true,
   "customUi": true,
-  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. The room fans use no Roborock routines, so the app's 10-routine limit does not apply. The routines you do have in the Roborock app can be added as switches from the Routines list above. A routine or room clean started from the Roborock app shows on its switch or fan too. The Map camera box adds a camera that shows the robot's map.",
+  "headerDisplay": "Adds a fan in Apple Home for every room on your Roborock map. Turning the fan on cleans that room; the fan speed sets the suction power (25% Quiet, 50% Balanced, 75% Turbo, 100% Max). The Rooms list above controls which rooms get a fan and how many passes each one does; the defaults are set below. The room fans use no Roborock routines, so the app's 10-routine limit does not apply. The routines you do have in the Roborock app can be added as switches from the Routines list above. A routine or room clean started from the Roborock app shows on its switch or fan too. The Map camera box adds a camera that shows the robot's map. The Robot vacuum box adds the robot itself, with the vacuum icon, through Matter.",
   "schema": {
     "type": "object",
     "properties": {
@@ -265,6 +265,18 @@
         "type": "boolean",
         "default": true,
         "description": "When a routine or a room clean is started from the Roborock app, a schedule or another plugin, the matching switch or fan turns on in Apple Home and turns off when the clean ends. It is recognised by the rooms the robot is cleaning."
+      },
+      "matterVacuum": {
+        "title": "Add the robot to Apple Home as a robot vacuum (Matter)",
+        "type": "boolean",
+        "default": false,
+        "description": "The robot with the vacuum icon in Apple Home: start, pause, send to the dock, choose rooms, vacuum / mop and suction, battery. Needs Homebridge 2 with Matter turned on for this plugin's bridge. Set it up in the Robot vacuum box above."
+      },
+      "matterVacuumName": {
+        "title": "Name of the robot vacuum",
+        "type": "string",
+        "placeholder": "S8",
+        "description": "Default: the robot's name."
       },
       "mapCamera": {
         "title": "Add a camera that shows the robot's map",

@@ -22,6 +22,7 @@ class UiServer extends HomebridgePluginUiServer {
     this.onRequest("/send-code", (p) => this.sendCode(p));
     this.onRequest("/login", (p) => this.doLogin(p));
     this.onRequest("/logout", () => this.logout());
+    this.onRequest("/matter/status", () => this.matterStatus());
     this.onRequest("/map/themes", () => this.mapThemes());
     this.onRequest("/map/preview", (p) => this.mapPreview(p || {}));
 
@@ -128,6 +129,27 @@ class UiServer extends HomebridgePluginUiServer {
     } catch (err) {
       // The code lets the settings page show the reason in the chosen language.
       throw new RequestError(err.message, { message: err.message, code: err.code });
+    }
+  }
+
+  // ---------- robot vacuum (Matter) ----------
+
+  /**
+   * Whether Matter is turned on for the bridge this plugin runs on, read from
+   * Homebridge's config.json (the settings page says what is still to do).
+   * { known, matter, child }.
+   */
+  matterStatus() {
+    try {
+      const config = JSON.parse(fs.readFileSync(this.homebridgeConfigPath, "utf8"));
+      const block = (Array.isArray(config.platforms) ? config.platforms : []).find((p) => p && p.platform === "RoborockRoomClean");
+      const child = !!(block && block._bridge);
+      const matter = child ? block._bridge.matter : config.bridge && config.bridge.matter;
+      // Same rule as Homebridge: a matter block that is not switched off, or one that only publishes accessories of their own.
+      const on = !!matter && typeof matter === "object" && (matter.enabled !== false || matter.externalsOnly === true);
+      return { known: true, matter: on, child };
+    } catch {
+      return { known: false, matter: false, child: false };
     }
   }
 

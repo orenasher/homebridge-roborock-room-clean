@@ -8,6 +8,7 @@ A Homebridge plugin that adds a **fan in Apple Home for every room on your Robor
 - Change the speed while it cleans and the suction changes live.
 - The fan stays on while the robot cleans and turns off when it's done. Turning it off sends the robot back to the dock.
 - A routine or room clean started from the Roborock app shows in Apple Home too, on its switch or fan.
+- Optional **robot vacuum**: the robot itself in Apple Home, with the vacuum icon, through Matter. See [Robot vacuum (Matter)](#robot-vacuum-matter).
 - Optional **map camera**: the robot's live map as a camera in Apple Home, in a colour style you choose. See [Map camera](#map-camera).
 - Settings page in English or Hebrew.
 
@@ -81,6 +82,41 @@ The robot does not say which routine it is running, so the plugin reads from the
 - The map is read through the Roborock cloud, normally with a single request per clean.
 - Turn the feature off with `followExternal: false` ("Show cleans started outside Apple Home" under Routine switches).
 
+## Robot vacuum (Matter)
+
+Turn on **Robot vacuum** in the plugin settings and the robot appears in Apple Home as a real **robot vacuum**, with the vacuum icon and Home's own vacuum screen:
+
+- **Start, pause, resume, send to the dock**, with the robot's state (cleaning, paused, returning, charging, error) and its **battery**.
+- **Rooms**: tick the rooms to clean. No rooms, or all of them, cleans the whole home.
+- **Kind of clean**: vacuum, mop, or vacuum and mop (mopping only for robots that mop), and the **suction**: Home shows the levels as Quiet, Automatic (Balanced), Quick (Turbo) and Max. Changing it while the robot cleans takes effect at once.
+
+Apple Home knows robot vacuums only through **Matter**. Homebridge 2 has Matter built in, so nothing else is installed; it only has to be turned on for the plugin's bridge. Homebridge publishes a robot vacuum on its own, with its own pairing code, apart from the plugin's bridge.
+
+**Setting it up**
+
+1. In the Homebridge UI, on the Plugins page, open this plugin's menu, choose **Child Bridge Config** and turn on **Enable Matter**. ("Externals Only (Matter)" can be turned on too.) If the plugin runs on the main bridge instead of a bridge of its own, turn Matter on for the main bridge in the Homebridge settings: Matter has to be on for the bridge the plugin runs on.
+2. Turn on **Robot vacuum** in the plugin settings, save, and restart Homebridge. The settings page says whether Matter is on for the bridge.
+3. The Homebridge log now has the lines `Commissioning codes for <robot>` with a **Manual Code**. In the Home app choose **Add Accessory > More options**, pick the vacuum and enter that code.
+
+**How it fits with the rest**
+
+- The fans, routine switches, charging sensor and map camera stay exactly as they are; use whichever you like.
+- A clean started from the vacuum also shows on the fan (or routine switch) of exactly those rooms, unless `followExternal` is turned off. A clean started from a fan, a routine switch or the Roborock app shows on the vacuum.
+- Home's line under the vacuum names the room being cleaned. For several rooms it names the first one until the robot itself says where it is (newer robots do); for the whole home it names none.
+- One room is cleaned with the passes set for that room; several rooms with the default `repeat`; the whole home the way the robot itself is set.
+- With `restoreSettings` (the default) the robot's own suction and water setting are put back when a clean started from the vacuum ends.
+- **Stop** stops the robot where it is. **Send to dock** takes it home.
+
+Good to know:
+
+- Home takes the list of kinds of clean on the day the vacuum is added. The list follows `enableMaxPlus`, so set that first. A level added later shows after you remove the vacuum from the Home app and add it again; a level that was offered once stays offered.
+- The vacuum is published once the robot has answered and its rooms are known. A robot without rooms on its map is not published: Home does not take a robot vacuum without rooms.
+- What Homebridge holds for the vacuum is compared with the robot every minute and put right when it differs, so a missed update does not stay.
+- The battery level under the vacuum can lag behind in the Home app. The fans and the charging sensor show the same battery.
+- Matter support in Homebridge is new. If the vacuum shows "No Response", check the Homebridge log first; restarting the Apple device that shows it has helped others.
+- If the vacuum cannot be published, the log says so once and everything else in the plugin goes on working.
+- Turning `matterVacuum` off stops publishing the vacuum; remove it in the Home app too.
+
 ## Map camera
 
 Turn on **Map camera** in the plugin settings and the robot's map appears in Apple Home as a **camera**: the rooms in colour with their names, the walls, the path the robot drove, where it is now, its dock, the no-go zones from the Roborock app, and a status line (what the robot is doing, battery, area and time of the clean). While rooms are being cleaned, those rooms stand out and the others are toned down.
@@ -129,6 +165,8 @@ The **Language** box at the top of the plugin settings switches the settings pag
 | `routineNameTemplate` | `{routine}` | Switch name, `{routine}` = routine name from the Roborock app |
 | `followExternal` | `true` | Show cleans started outside Apple Home on the matching switch or fan |
 | `language` | `en` | `en` or `he` (Hebrew): language of the settings page, of the default names and of the texts on the map |
+| `matterVacuum` | `false` | Add the robot as a [robot vacuum](#robot-vacuum-matter) through Matter |
+| `matterVacuumName` | the robot's name | Name of the robot vacuum |
 | `mapCamera` | `false` | Add the [map camera](#map-camera) |
 | `mapCameraName` | `<robot> Map` | Name of the camera |
 | `mapTheme` | `roborock` | Colour style: `roborock`, `light`, `dark`, `pastel`, `blueprint`, `mono`, `sand`, `neon` |
@@ -167,7 +205,7 @@ Example:
 
 ## Files
 
-Stored in `<homebridge storage>/roborock-room-clean/`: `auth.json` (the Roborock session), `home-cache.json`, `rooms-<robot>.json` and `routines-<robot>.json` (used when the cloud is unreachable at startup). `status-<robot>.json` keeps the last known battery level and dock state, `map-<robot>.bin` the last map read for the map camera, and `listen.json` remembers that Roborock's cloud refused the listening described under [Cleans started outside Apple Home](#cleans-started-outside-apple-home), so it is not tried at every start (it is forgotten when you log out or in). None of these has to be restored for the plugin to work: whatever is missing is read again from Roborock.
+Stored in `<homebridge storage>/roborock-room-clean/`: `auth.json` (the Roborock session), `home-cache.json`, `rooms-<robot>.json` and `routines-<robot>.json` (used when the cloud is unreachable at startup). `status-<robot>.json` keeps the last known battery level and dock state, `vacuum-<robot>.json` what the robot vacuum in Apple Home was set to (rooms, kind of clean) and which kinds of clean it was published with, `map-<robot>.bin` the last map read for the map camera, and `listen.json` remembers that Roborock's cloud refused the listening described under [Cleans started outside Apple Home](#cleans-started-outside-apple-home), so it is not tried at every start (it is forgotten when you log out or in). None of these has to be restored for the plugin to work: whatever is missing is read again from Roborock. They are all part of a Homebridge UI backup, and so is the pairing of the robot vacuum (Homebridge keeps it in its own `matter` folder); restore them together.
 
 ## Credits
 
@@ -178,6 +216,8 @@ Protocol details based on [python-roborock](https://github.com/Python-roborock/p
 <div dir="rtl">
 
 התוסף מוסיף לאפליקציית "בית" של Apple מאוורר לכל חדר במפה של שואב Roborock: הדלקת המאוורר מנקה את החדר, ומהירות המאוורר היא עוצמת השאיבה. אפשר להוסיף גם שילובי חדרים, ואת תוכניות העבודה מאפליקציית Roborock כמתגים. תוכנית עבודה שהופעלה מאפליקציית Roborock מוצגת כדלוקה גם ב"בית".
+
+**שואב רובוטי (Matter)**: בהגדרות התוסף אפשר להוסיף את הרובוט עצמו ל"בית" כשואב רובוטי, עם האייקון של השואב: הפעלה, השהיה, שליחה לעמדת הטעינה, בחירת חדרים, שאיבה או שטיפה ועוצמת השאיבה, וסוללה. נדרש Homebridge 2 עם Matter מופעל בגשר של התוסף (Child Bridge Config > Enable Matter). את השואב מצמדים פעם אחת עם ה-Manual Code שמופיע בלוג של Homebridge. עצירה מהשואב עוצרת את הרובוט במקומו, ו"שלח לעמדת הטעינה" מחזיר אותו לעמדה.
 
 **מצלמת מפה**: בהגדרות התוסף אפשר להוסיף ל"בית" מצלמה שמציגה את המפה של הרובוט: החדרים בצבעים עם השמות שלהם, המסלול שהרובוט עבר, איפה הוא נמצא ושורת מצב. בוחרים סגנון צבעים מתוך שמונה, ואפשר לקבוע צבעים משלך וצבע לכל חדר. התוסף מצייר את המפה בעצמו, בלי תוסף או סקריפט נוסף. את המצלמה מוסיפים ל"בית" פעם אחת: הוסף אביזר > אפשרויות נוספות, בוחרים את המצלמה ומזינים את קוד ההתקנה של הגשר של התוסף.
 

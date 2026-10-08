@@ -7,6 +7,7 @@ const { RoborockSession } = require("./lib/robot");
 const { MapView } = require("./lib/mapview");
 const { PictureCamera } = require("./lib/camera");
 const { Painter } = require("./lib/painter");
+const { MatterVacuum } = require("./lib/vacuum");
 
 const PLUGIN_NAME = "homebridge-roborock-room-clean";
 const PLATFORM_NAME = "RoborockRoomClean";
@@ -79,6 +80,8 @@ class RoborockRoomCleanPlatform {
     this.views = new Map(); // duid -> MapView (the picture of the map camera)
     this.cameras = [];
     this.painter = null;
+    this.vacuums = new Map(); // duid -> MatterVacuum (the robot as a robot vacuum in Apple Home)
+    this.saidNoMatter = false;
     this.storageDir = path.join(api.user.storagePath(), STORAGE_DIR);
     this.session = null;
     this.stopped = false;
@@ -99,6 +102,7 @@ class RoborockRoomCleanPlatform {
       for (const p of this.programs.values()) clearTimeout(p.pollTimer);
       for (const m of this.monitors.values()) clearTimeout(m.timer);
       for (const camera of this.cameras) camera.close();
+      for (const vacuum of this.vacuums.values()) vacuum.close();
       for (const view of this.views.values()) view.close();
       if (this.painter) this.painter.close(true);
       if (this.session) this.session.stop();
@@ -199,6 +203,7 @@ class RoborockRoomCleanPlatform {
     this.session.start();
 
     const wanted = new Set();
+    const roomsOf = new Map(); // duid -> [{ segmentId, name }]
     const routineEntries = this.routineEntries();
     let routinesComplete = true;
     for (const robot of robots) {
@@ -206,6 +211,7 @@ class RoborockRoomCleanPlatform {
       const savedIp = (this.config.robotIps || {})[robot.name] || this.config.robotIp || (this.readJson(netFile) || {}).ip;
       const channel = this.session.channel(robot.duid, robot.localKey, robot.name, savedIp);
       const segments = await this.loadRooms(channel, roomNames);
+      roomsOf.set(robot.duid, segments);
       if (!this.config.robotIp) {
         try {
           const ip = await channel.getIp();
@@ -251,6 +257,15 @@ class RoborockRoomCleanPlatform {
       }
     }
     this.ready = true;
+    if (this.config.matterVacuum === true) {
+      for (const robot of robots) {
+        try {
+          this.setupMatterVacuum(robot, this.monitors.get(robot.duid).channel, roomsOf.get(robot.duid) || [], robots.length > 1, products.get(robot.productId));
+        } catch (err) {
+          this.log.error(`${robot.name}: the robot vacuum for Apple Home could not be set up: ${err.message}`);
+        }
+      }
+    }
     if (routinesComplete) {
       const missing = routineEntries.filter((e) => !e.matched).map((e) => e.name || e.id);
       if (missing.length) {
@@ -265,6 +280,130 @@ class RoborockRoomCleanPlatform {
       for (const a of stale) this.accessories.delete(a.UUID);
       this.log.info(`Removed ${stale.length} old accessory(ies).`);
     }
+  }
+
+  // ---------- robot vacuum (Matter) ----------
+
+  /**
+   * The robot as a robot vacuum in Apple Home: its own tile with the vacuum
+   * icon. Apple Home knows robot vacuums only through Matter, which Homebridge
+   * offers from version 2 on, on bridges where Matter is turned on. Homebridge
+   * publishes a robot vacuum on its own, with its own pairing code.
+   */
+  setupMatterVacuum(robot, channel, rooms, multiRobot, product) {
+    const api = this.api;
+    const enabled = typeof api.isMatterEnabled === "function" ? api.isMatterEnabled() : !!api.matter;
+    const matter = enabled ? api.matter : null;
+    if (!matter || !matter.deviceTypes || !matter.deviceTypes.RoboticVacuumCleaner || typeof matter.registerPlatformAccessories !== "function") {
+      if (!this.saidNoMatter) {
+        this.saidNoMatter = true;
+        this.log.warn(
+          matter
+            ? "The robot vacuum for Apple Home is turned on in the plugin settings, but this Homebridge version has no robot vacuums in its Matter support. Update Homebridge."
+            : "The robot vacuum for Apple Home is turned on in the plugin settings, but Matter is not turned on for this plugin's bridge, so there is no vacuum in Apple Home yet. " +
+                "In the Homebridge UI open this plugin's bridge settings, turn Matter on (Homebridge 2 or later) and restart Homebridge. The fans, switches and the map camera do not need it."
+        );
+      }
+      return null;
+    }
+    let name = String(this.config.matterVacuumName || "").trim();
+    if (!name) name = robot.name;
+    else if (multiRobot) name = `${name} ${robot.name}`;
+    const file = `vacuum-${robot.duid}.json`;
+    const programs = () => [...this.programs.values()].filter((p) => p.robot.duid === robot.duid);
+    // The fans and switches of this robot go off. What one of them still meant to
+    // put back (the robot's own suction and water) is handed on, not dropped.
+    const switchOff = () => {
+      let restore = null;
+      for (const program of programs()) {
+        clearTimeout(program.startTimer);
+        program.startTimer = null;
+        // Also from a fan that was just turned off and has not put its settings back yet.
+        restore = restore || program.restore || null;
+        program.restore = null;
+        if (!program.running) continue;
+        clearTimeout(program.pollTimer);
+        this.setRunning(program, false);
+      }
+      return restore;
+    };
+    const vacuum = new MatterVacuum({
+      log: this.log,
+      matter,
+      pluginName: PLUGIN_NAME,
+      platformName: PLATFORM_NAME,
+      name,
+      robot,
+      model: (product && (product.name || product.model)) || "Robot vacuum",
+      channel,
+      rooms,
+      maxPlus: !!this.config.enableMaxPlus,
+      defaultFan: SUCTION[this.levels().includes(this.config.suction) ? this.config.suction : "max"],
+      // One room: the passes set for that room. Several: the default.
+      repeat: (ids) => {
+        const own = ids.length === 1 ? programs().find((p) => p.kind !== "routine" && p.segments.length === 1 && p.segments[0] === ids[0]) : null;
+        return clampRepeat(own ? own.repeat : (this.config.repeat ?? 2));
+      },
+      restore: this.config.restoreSettings !== false,
+      store: { read: () => this.readJson(file), write: (data) => this.writeJson(file, data) },
+      checkMs: this.vacuumCheckMs, // tests only
+      status: () => {
+        const monitor = this.monitors.get(robot.duid);
+        if (!monitor || (!monitor.full && !monitor.last)) return null;
+        return { ...(monitor.full || {}), ...(monitor.last || {}), fullAt: monitor.fullAt };
+      },
+      readStatus: (maxAgeMs) => this.readStatus(robot.duid, channel, maxAgeMs),
+      refreshSoon: (ms) => this.refreshStatusSoon(robot.duid, ms),
+      sendToDock: (still) => this.sendToDock({ channel, robot, name }, still),
+      // A fan or switch of this robot is on, or about to start.
+      othersBusy: () => programs().some((p) => p.running || p.startTimer),
+      // The plugin stopped a clean of this robot a moment ago (the robot may not show it yet).
+      stopping: () => {
+        const monitor = this.monitors.get(robot.duid);
+        return !!monitor && Date.now() < (monitor.quietUntil || 0);
+      },
+      // A setting the vacuum just sent: the status known here says so at once.
+      noteSetting: (key, value) => {
+        const monitor = this.monitors.get(robot.duid);
+        if (monitor && monitor.full) monitor.full = { ...monitor.full, [key]: value };
+      },
+      // Homebridge 2.4.0 and later can be asked whether it brought the vacuum up.
+      verify: typeof api.versionGreaterOrEqual === "function" && api.versionGreaterOrEqual("2.4.0"),
+      // A clean started from the vacuum is this plugin's own: the fans and switches of the robot go off...
+      started: () => {
+        const restore = switchOff();
+        this.begun(robot.duid);
+        this.claim(robot.duid);
+        return restore;
+      },
+      // ... and the one that stands for exactly this clean is shown as on, like for a clean started in the Roborock app.
+      show: (ids, status) => {
+        if (this.config.followExternal === false) return;
+        const match = ids ? this.matchExternal(programs(), "segments", ids, status) : this.matchExternal(programs(), "all", null, status);
+        if (!match) return;
+        this.log.info(`${match.name}: started from the robot vacuum in Apple Home, showing it as on.`);
+        this.adopt(match, status);
+        match.startedAt = Date.now(); // just started: the robot may take a moment to get going
+      },
+      stopped: () => {
+        const restore = switchOff();
+        this.quiet(robot.duid);
+        return restore;
+      },
+      // The rooms of the fan or switch that is on now: a list, null for the whole home (or when
+      // they cannot be told), undefined when none is on.
+      runningRooms: () => {
+        const program = programs().find((p) => p.running);
+        if (!program) return undefined;
+        if (program.kind !== "routine") return (program.segments || []).slice();
+        const steps = program.steps || [];
+        if (!steps.length || steps.some((step) => step.kind !== "segments")) return null;
+        return [...new Set(steps.flatMap((step) => step.segments))];
+      },
+    });
+    this.vacuums.set(robot.duid, vacuum);
+    vacuum.start();
+    return vacuum;
   }
 
   // ---------- map camera ----------
@@ -486,6 +625,7 @@ class RoborockRoomCleanPlatform {
   async startRoutine(program) {
     const { channel } = program;
     this.takeOver(program);
+    this.begun(program.robot.duid);
     program.adopted = false;
     this.setRunning(program, true);
     this.claim(program.robot.duid);
@@ -763,6 +903,8 @@ class RoborockRoomCleanPlatform {
       if (changed) this.writeJson(`status-${duid}.json`, monitor.last);
       const view = this.views.get(duid);
       if (view) view.statusChanged(before, monitor.last);
+      const vacuum = this.vacuums.get(duid);
+      if (vacuum) vacuum.statusChanged();
     }
     this.updateChargingSensor(duid, status);
     for (const program of this.programs.values()) {
@@ -864,7 +1006,20 @@ class RoborockRoomCleanPlatform {
     for (const program of this.programs.values()) {
       if (program.robot.duid === duid && (program.running || program.startTimer)) return true;
     }
-    return false;
+    // A clean started from the robot vacuum in Apple Home is this plugin's own as well.
+    const vacuum = this.vacuums.get(duid);
+    return !!(vacuum && vacuum.job);
+  }
+
+  /** A clean of this robot is being started (by a fan, a routine switch or the vacuum). */
+  begun(duid) {
+    const monitor = this.monitors.get(duid);
+    if (monitor) monitor.starts = (monitor.starts || 0) + 1;
+  }
+
+  startsOf(duid) {
+    const monitor = this.monitors.get(duid);
+    return monitor ? monitor.starts || 0 : 0;
   }
 
   /** The clean the robot is doing now (or is about to do) is this plugin's own. */
@@ -1250,18 +1405,24 @@ class RoborockRoomCleanPlatform {
   /** Only one fan or routine per robot can run at a time: switch the others off. */
   takeOver(program) {
     for (const other of this.programs.values()) {
-      if (other !== program && other.channel === program.channel && other.running) {
+      if (other === program || other.channel !== program.channel) continue;
+      // Also from one that was just turned off and has not put its settings back yet.
+      program.restore = program.restore || other.restore;
+      other.restore = null;
+      if (other.running) {
         clearTimeout(other.pollTimer);
         this.setRunning(other, false);
-        program.restore = program.restore || other.restore;
-        other.restore = null;
       }
     }
+    // A clean started from the robot vacuum in Apple Home ends here too; what it meant to put back, this one puts back.
+    const vacuum = this.vacuums.get(program.robot.duid);
+    if (vacuum) program.restore = program.restore || vacuum.handOver();
   }
 
   async startProgram(program) {
     const { channel } = program;
     this.takeOver(program);
+    this.begun(program.robot.duid);
     program.adopted = false;
     this.setRunning(program, true);
     this.claim(program.robot.duid);
@@ -1308,9 +1469,11 @@ class RoborockRoomCleanPlatform {
     this.setRunning(program, false);
     this.quiet(program.robot.duid);
     this.log.info(`${program.name}: stopping and returning to the dock.`);
+    const starts = this.startsOf(program.robot.duid);
     try {
       await program.channel.send("app_stop", []);
-      await this.sendToDock(program);
+      // Not when another clean was started meanwhile: the robot would be sent home from it.
+      await this.sendToDock(program, () => this.startsOf(program.robot.duid) === starts);
     } catch (err) {
       this.log.error(`${program.name}: could not stop: ${err.message}`);
     }
@@ -1324,10 +1487,11 @@ class RoborockRoomCleanPlatform {
    * stopping refuses this for a moment ("action locked"), so it is tried a
    * few times; a robot that is already on the dock needs nothing.
    */
-  async sendToDock(program) {
+  async sendToDock(program, still = () => true) {
     const { channel, robot } = program;
     for (let attempt = 1; ; attempt++) {
       await sleep(attempt === 1 ? 1500 : this.dockRetryMs);
+      if (!still()) return;
       try {
         await channel.send("app_charge", []);
         return;

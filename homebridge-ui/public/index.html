@@ -20,6 +20,10 @@
   [dir="rtl"] .list-group { padding-right: 0; }
   [dir="rtl"] .form-check { padding-left: 0; padding-right: 1.5em; }
   [dir="rtl"] .form-check .form-check-input { float: right; margin-left: 0; margin-right: -1.5em; }
+  .rr-steps { padding-inline-start: 1.3em; }
+  .rr-steps li { margin-bottom: 0.35rem; }
+  .rr-good { border-inline-start: 4px solid #2e9e5b; padding-inline-start: 0.6rem; }
+  .rr-todo { border-inline-start: 4px solid #ffa000; padding-inline-start: 0.6rem; }
   /* Map camera */
   .rr-map-img { display: block; max-width: 100%; max-height: 26rem; margin: 0 auto; border-radius: 0.6rem; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25); }
   .rr-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.5rem; }
@@ -108,6 +112,39 @@
 </div>
 
 <!-- The plugin's settings in Hebrew. In English the regular Homebridge form is shown instead. -->
+<div class="card mb-3" id="rr-vac-card" style="display: none">
+  <div class="card-body">
+    <h5 class="card-title mb-2" data-t="vac.title">Robot vacuum (Matter)</h5>
+    <p class="rr-hint mb-2" data-t="vac.help"></p>
+    <div class="form-check mb-2">
+      <input class="form-check-input" type="checkbox" id="rr-vac-on" />
+      <label class="form-check-label" for="rr-vac-on" data-t="vac.enable">Add the robot to Apple Home as a robot vacuum</label>
+    </div>
+    <div id="rr-vac-body" style="display: none">
+      <p class="mb-3" id="rr-vac-matter" role="status"></p>
+      <div class="rr-field">
+        <label for="rr-vac-name" data-t="vac.name">Name of the robot vacuum</label>
+        <input type="text" class="form-control" id="rr-vac-name" dir="auto" />
+        <p class="rr-hint" data-t="vac.nameHelp"></p>
+      </div>
+      <h6 class="mb-2" data-t="vac.stepsTitle">Setting it up</h6>
+      <ol class="rr-hint rr-steps mb-3">
+        <li data-t="vac.step1"></li>
+        <li data-t="vac.step2"></li>
+        <li data-t="vac.step3"></li>
+      </ol>
+      <h6 class="mb-2" data-t="vac.notesTitle">How it works</h6>
+      <ul class="rr-hint rr-steps mb-0">
+        <li data-t="vac.note1"></li>
+        <li data-t="vac.note2"></li>
+        <li data-t="vac.note3"></li>
+        <li data-t="vac.note4"></li>
+        <li data-t="vac.note5"></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
 <div class="card mb-3" id="rr-map-card" style="display: none">
   <div class="card-body">
     <h5 class="card-title mb-2" data-t="map.title">Map camera</h5>
@@ -251,6 +288,24 @@
         "toast.loginFailed": "Login failed",
         "toast.loggedOut": "Logged out.",
         "default.fan": "Clean {room}",
+        "vac.title": "Robot vacuum (Matter)",
+        "vac.help": "The robot as a real robot vacuum in Apple Home, with the vacuum icon: start, pause, send to the dock, choose rooms, choose vacuuming or mopping and the suction, and see the battery. Apple Home knows robot vacuums only through Matter, which Homebridge 2 offers. The fans, switches and the map camera stay as they are.",
+        "vac.enable": "Add the robot to Apple Home as a robot vacuum",
+        "vac.matterOn": "Matter is turned on for this plugin's bridge.",
+        "vac.matterOff": "Matter is not turned on for this plugin's bridge yet. Until it is, there is no vacuum in Apple Home: see step 1.",
+        "vac.name": "Name of the robot vacuum",
+        "vac.nameHelp": "Leave empty for the robot's own name. Once the vacuum is in Apple Home, rename it in the Home app.",
+        "vac.namePlaceholder": "S8",
+        "vac.stepsTitle": "Setting it up",
+        "vac.step1": "Turn Matter on for this plugin's bridge: on the Plugins page of the Homebridge UI open this plugin's menu, choose \"Child Bridge Config\" and turn on \"Enable Matter\". \"Externals Only (Matter)\" can be turned on as well: the vacuum is always published on its own.",
+        "vac.step2": "Press Save here and restart Homebridge.",
+        "vac.step3": "The Homebridge log now has the lines \"Commissioning codes for …\" with a \"Manual Code\". In the Home app choose Add Accessory > More options, pick the vacuum and enter that code.",
+        "vac.notesTitle": "How it works",
+        "vac.note1": "Play cleans the rooms chosen on the vacuum's tile. With no rooms chosen, or all of them, the whole home is cleaned.",
+        "vac.note2": "One room is cleaned with the passes set for it in the Rooms list above; several rooms with the default passes; the whole home as the robot itself is set.",
+        "vac.note3": "A clean started from the vacuum also shows on the fan or routine switch of exactly those rooms (unless showing cleans started outside Home is turned off below), and a clean started from a fan, a switch or the Roborock app shows on the vacuum.",
+        "vac.note4": "Stop on the vacuum stops the robot where it is. \"Send to dock\" takes it home.",
+        "vac.note5": "The choice of suction follows \"Add Max+\" below. Set it before adding the vacuum to the Home app: Home takes the list on the day the vacuum is added. To see a level added later, remove the vacuum from the Home app and add it again.",
         "map.title": "Map camera",
         "map.help": "A camera in Apple Home that shows the robot's map: the rooms in colour, the path it drove, where it is now and what it is doing. The plugin reads and draws the map itself, with no other plugin and no script. Open the camera for the live view; its tile shows the latest picture.",
         "map.enable": "Add a camera that shows the robot's map to Apple Home",
@@ -350,6 +405,24 @@
         "toast.loginFailed": "ההתחברות נכשלה",
         "toast.loggedOut": "התנתקת.",
         "default.fan": "ניקוי {room}",
+        "vac.title": "שואב רובוטי (Matter)",
+        "vac.help": "הרובוט כשואב רובוטי אמיתי ב\"בית\", עם האייקון של השואב: הפעלה, השהיה, שליחה לעמדת הטעינה, בחירת חדרים, בחירה בין שאיבה לשטיפה ובעוצמת השאיבה, והצגת הסוללה. \"בית\" מכיר שואבים רובוטיים רק דרך Matter, ש-Homebridge 2 מספק. המאווררים, המתגים ומצלמת המפה נשארים כמו שהם.",
+        "vac.enable": "הוסף את הרובוט ל\"בית\" כשואב רובוטי",
+        "vac.matterOn": "Matter מופעל בגשר של התוסף הזה.",
+        "vac.matterOff": "Matter עדיין לא מופעל בגשר של התוסף הזה. עד שיופעל לא יהיה שואב ב\"בית\": ראה שלב 1.",
+        "vac.name": "שם השואב",
+        "vac.nameHelp": "השאר ריק כדי להשתמש בשם של הרובוט. אחרי שהשואב נוסף ל\"בית\", משנים את שמו באפליקציית \"בית\".",
+        "vac.namePlaceholder": "S8",
+        "vac.stepsTitle": "איך מגדירים",
+        "vac.step1": "הפעל Matter בגשר של התוסף הזה: בעמוד התוספים של Homebridge פתח את התפריט של התוסף, בחר \"Child Bridge Config\" והפעל את \"Enable Matter\". אפשר להפעיל גם את \"Externals Only (Matter)\": השואב מתפרסם תמיד בנפרד.",
+        "vac.step2": "לחץ כאן על שמירה והפעל מחדש את Homebridge.",
+        "vac.step3": "בלוג של Homebridge יופיעו השורות \"Commissioning codes for …\" עם \"Manual Code\". באפליקציית \"בית\" בחר הוסף אביזר > אפשרויות נוספות, בחר את השואב והזן את הקוד הזה.",
+        "vac.notesTitle": "איך זה עובד",
+        "vac.note1": "לחיצה על הפעלה מנקה את החדרים שנבחרו באריח של השואב. אם לא נבחרו חדרים, או שנבחרו כולם, מנוקה כל הבית.",
+        "vac.note2": "חדר אחד מנוקה במספר המעברים שנקבע לו ברשימת החדרים למעלה; כמה חדרים במספר המעברים של ברירת המחדל; כל הבית לפי ההגדרה של הרובוט עצמו.",
+        "vac.note3": "ניקוי שהופעל מהשואב מוצג גם במאוורר או במתג של אותם חדרים בדיוק (אלא אם ההצגה של ניקוי שהופעל מחוץ ל\"בית\" כבויה למטה), וניקוי שהופעל ממאוורר, ממתג או מאפליקציית Roborock מוצג גם בשואב.",
+        "vac.note4": "עצירה מהשואב עוצרת את הרובוט במקום שבו הוא נמצא. \"שלח לעמדת הטעינה\" מחזיר אותו לעמדה.",
+        "vac.note5": "רשימת עוצמות השאיבה נקבעת לפי \"הוסף את מקסימום+\" שלמטה. קבע אותה לפני שמוסיפים את השואב לאפליקציית \"בית\": \"בית\" לוקח את הרשימה ביום שבו השואב נוסף. כדי לראות עוצמה שנוספה אחר כך, הסר את השואב מאפליקציית \"בית\" והוסף אותו מחדש.",
         "map.title": "מצלמת מפה",
         "map.help": "מצלמה ב\"בית\" שמציגה את המפה של הרובוט: החדרים בצבעים, המסלול שעבר, איפה הוא נמצא עכשיו ומה הוא עושה. התוסף קורא ומצייר את המפה בעצמו, בלי תוסף אחר ובלי סקריפט. פתיחת המצלמה מציגה את המפה בשידור חי, והאריח שלה מציג את התמונה האחרונה.",
         "map.enable": "הוסף ל\"בית\" מצלמה שמציגה את המפה של הרובוט",
@@ -822,6 +895,63 @@
       const { block } = await loadConfig();
       resetProgramForm(block);
     });
+
+    // ---------- robot vacuum (Matter) ----------
+
+    /** Draw the Robot vacuum card; whatever goes wrong in it, the rest of the page is still shown. */
+    async function showVacuumCard() {
+      try {
+        $("rr-vac-card").style.display = loggedIn ? "block" : "none";
+        if (!loggedIn) return;
+        const { block } = await loadConfig();
+        const on = block.matterVacuum === true;
+        $("rr-vac-on").checked = on;
+        $("rr-vac-body").style.display = on ? "block" : "none";
+        if (!on) return;
+        $("rr-vac-name").value = block.matterVacuumName == null ? "" : block.matterVacuumName;
+        $("rr-vac-name").placeholder = t("vac.namePlaceholder");
+        // Whether Matter is on for the bridge: read by the plugin's own part of the Homebridge UI.
+        const line = $("rr-vac-matter");
+        line.textContent = "";
+        line.className = "mb-3";
+        let status = null;
+        try {
+          status = await homebridge.request("/matter/status");
+        } catch (e) {
+          status = null; // an older plugin part is still running: the steps below say what to do
+        }
+        if (status && status.known) {
+          line.textContent = t(status.matter ? "vac.matterOn" : "vac.matterOff");
+          line.className = "mb-3 " + (status.matter ? "rr-good" : "rr-todo");
+        }
+      } catch (e) {
+        $("rr-vac-card").style.display = "none";
+      }
+    }
+
+    $("rr-vac-on").addEventListener("change", () => {
+      const on = $("rr-vac-on").checked;
+      serial(async () => {
+        await setField("matterVacuum", on);
+        await showVacuumCard();
+      });
+    });
+    {
+      let nameTimer = null;
+      const pushName = () => {
+        clearTimeout(nameTimer);
+        nameTimer = null;
+        const value = $("rr-vac-name").value.trim();
+        serial(() => setField("matterVacuumName", value || undefined));
+      };
+      $("rr-vac-name").addEventListener("input", () => {
+        clearTimeout(nameTimer);
+        nameTimer = setTimeout(pushName, 300);
+      });
+      $("rr-vac-name").addEventListener("change", () => {
+        if (nameTimer) pushName();
+      });
+    }
 
     // ---------- map camera ----------
 
@@ -1307,6 +1437,7 @@
         applyLanguage();
         resetProgramForm((await loadConfig()).block);
         showAccountLine();
+        await showVacuumCard();
         await showMapCard();
         await showSettingsForm();
       });
@@ -1400,6 +1531,7 @@
         $("rr-unsaved").style.display = "none";
         homebridge.toast.success(t("toast.found", { robots: (res.robots || []).join(", ") }), t("toast.loggedIn"));
         await refresh();
+        await showVacuumCard();
         await showMapCard();
         await showSettingsForm();
       } catch (e) {
@@ -1413,6 +1545,7 @@
       await homebridge.request("/logout");
       homebridge.toast.info(t("toast.loggedOut"));
       await refresh();
+      await showVacuumCard();
       await showMapCard();
     });
 
@@ -1426,6 +1559,7 @@
     lang = (await loadConfig()).block.language === "he" ? "he" : "en";
     applyLanguage();
     await refresh();
+    await showVacuumCard();
     await showMapCard();
     await showSettingsForm();
   })();

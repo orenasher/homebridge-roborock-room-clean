@@ -208,3 +208,48 @@ test("send to dock that the robot refuses: said in the log, and the robot's sett
   assert.ok(TOLD > 0);
   t.stop();
 });
+
+test("a clean started elsewhere while the robot drives home: Home shows its rooms, not those of the clean before", async () => {
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  const v = await t.published();
+  await t.press("serviceArea", "selectAreas", { newAreas: [16] });
+  await t.press("rvcRunMode", "changeToMode", { newMode: 1 });
+  await t.report(CLEANING);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 1 }, 16]);
+  await t.press("rvcOperationalState", "goHome");
+  await t.report({ ...CLEANING, state: 6, in_cleaning: 0 });
+  assert.deepEqual(t.shown(), [1, 64]);
+  // On its way home, the kitchen is started in the Roborock app.
+  robot.cleaning = [17];
+  await t.report({ ...CLEANING, state: 18, in_cleaning: 3 });
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 1, 17: 1 }, null], "the living room clean is over; which rooms this one cleans is not known");
+  assert.deepEqual(v.clusters.serviceArea.selectedAreas, [], "shown as a clean of the whole home");
+  t.stop();
+});
+
+test("a fan turned on while the robot drives home from the vacuum's clean: Home shows the fan's room", async () => {
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  const v = await t.published();
+  await t.press("serviceArea", "selectAreas", { newAreas: [16] });
+  await t.press("rvcRunMode", "changeToMode", { newMode: 1 });
+  await t.report(CLEANING);
+  await t.press("rvcOperationalState", "goHome");
+  await t.report({ ...CLEANING, state: 6, in_cleaning: 0 });
+  // The kitchen fan in Home.
+  t.byName("Clean מטבח").service.getCharacteristic("Active").setFn(1);
+  await wait(3000);
+  await t.report({ ...CLEANING, state: 18, in_cleaning: 3 });
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 17: 1 }, 17]);
+  // Home names the clean from the rooms shown as chosen: the fan's, while it runs.
+  assert.deepEqual(v.clusters.serviceArea.selectedAreas, [17]);
+  // Over: what was chosen on the vacuum is shown again.
+  t.platform.vacuums.get(DUID); // (the vacuum's own choice was the living room)
+  t.byName("Clean מטבח").startedAt -= 61000;
+  await t.report({ ...DOCKED });
+  await t.platform.poll(t.byName("Clean מטבח"));
+  await t.report({ ...DOCKED, battery: 86 });
+  assert.deepEqual(v.clusters.serviceArea.selectedAreas, [16]);
+  t.stop();
+});

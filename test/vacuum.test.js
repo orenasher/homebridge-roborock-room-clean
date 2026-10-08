@@ -59,6 +59,10 @@ test("the vacuum Home is told about: rooms, kinds of clean, battery, state", asy
   assert.equal(v.clusters.rvcRunMode.currentMode, 0);
   assert.equal(v.clusters.rvcOperationalState.operationalState, 65, "charging");
   assert.equal(v.clusters.powerSource.batPercentRemaining, 174, "87%, in Matter's half percents");
+  // Once after the start the battery is shown as unknown for a moment, then as it is: Home keeps the
+  // percentage it read when the vacuum was added until it finds the battery changed.
+  const battery = t.home.updates.filter((u) => u.cluster === "powerSource").map((u) => u.attributes.batPercentRemaining);
+  assert.deepEqual(battery.slice(0, 2), [null, 174]);
   assert.equal(v.clusters.powerSource.batChargeState, 1);
   assert.ok(t.said().some((l) => /published as a robot vacuum for Apple Home/.test(l) && /Manual Code/.test(l)));
   // The same robot is always the same accessory.

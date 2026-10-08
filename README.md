@@ -132,7 +132,7 @@ The plugin reads the map from the robot and draws the picture itself, in plain N
 
 **Adding it to Apple Home.** Cameras are separate accessories in HomeKit, so the camera is added once by hand: after saving and restarting Homebridge, open the Home app, choose **Add Accessory > More options**, pick the camera (named after the robot, for example "S8 Map") and enter the setup code of this plugin's bridge, the one shown next to the plugin's QR code in Homebridge.
 
-**ffmpeg.** The live view is video, and video is made by `ffmpeg` on the Homebridge computer, as for every camera in Homebridge. It is the one thing the camera uses that is not part of the plugin. The plugin looks for it in this order: the `ffmpegPath` setting, a copy that came with another camera plugin (`ffmpeg-for-homebridge`), the system's own. On a Raspberry Pi it is installed with `sudo apt install -y ffmpeg`. Without ffmpeg the camera still works as a picture that refreshes every few seconds; the log says so at start.
+**ffmpeg.** The live view is video, and video is made by `ffmpeg` on the Homebridge computer, as for every camera in Homebridge. It is the one thing the camera uses that is not part of the plugin. The plugin looks for it in this order: the `ffmpegPath` setting, a copy that came with another camera plugin (`ffmpeg-for-homebridge`), the system's own. On a Raspberry Pi it is installed with `sudo apt install -y ffmpeg`. Without ffmpeg the camera still works as a picture that refreshes every few seconds; the log says so at start. If the copy found is the one of another camera plugin, the live view stops working when that plugin is removed, so installing ffmpeg on the computer itself is the safer choice. Apart from ffmpeg for the live view, the plugin needs no other plugin and no script.
 
 **How often the robot is asked.** Only while somebody is looking: every 5 seconds while the camera is open and the robot is driving (once a minute while it stands still), and each time Apple Home refreshes the tile. One more read is done when a clean ends, so the tile shows the finished clean. The last map is kept on disk, so there is a picture right after a restart.
 
@@ -216,6 +216,8 @@ Protocol details based on [python-roborock](https://github.com/Python-roborock/p
 <div dir="rtl">
 
 התוסף מוסיף לאפליקציית "בית" של Apple מאוורר לכל חדר במפה של שואב Roborock: הדלקת המאוורר מנקה את החדר, ומהירות המאוורר היא עוצמת השאיבה. אפשר להוסיף גם שילובי חדרים, ואת תוכניות העבודה מאפליקציית Roborock כמתגים. תוכנית עבודה שהופעלה מאפליקציית Roborock מוצגת כדלוקה גם ב"בית".
+
+**תלויות**: התוסף לא צריך שום תוסף או סקריפט אחר. הדבר היחיד מבחוץ הוא ffmpeg, ורק לשידור החי של מצלמת המפה (התמונה עצמה עובדת גם בלעדיו). אם ffmpeg מגיע מתוסף מצלמה אחר, השידור החי יפסיק כשמסירים את התוסף ההוא, ולכן עדיף להתקין אותו במחשב עצמו: `sudo apt install -y ffmpeg`.
 
 **שואב רובוטי (Matter)**: בהגדרות התוסף אפשר להוסיף את הרובוט עצמו ל"בית" כשואב רובוטי, עם האייקון של השואב: הפעלה, השהיה, שליחה לעמדת הטעינה, בחירת חדרים, שאיבה או שטיפה ועוצמת השאיבה, וסוללה. נדרש Homebridge 2 עם Matter מופעל בגשר של התוסף (Child Bridge Config > Enable Matter). את השואב מצמדים פעם אחת עם ה-Manual Code שמופיע בלוג של Homebridge. עצירה מהשואב עוצרת את הרובוט במקומו, ו"שלח לעמדת הטעינה" מחזיר אותו לעמדה.
 

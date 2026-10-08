@@ -203,6 +203,7 @@
         </div>
       </details>
       <p class="rr-hint mt-3 mb-0" data-t="map.addHelp"></p>
+      <p class="rr-hint mt-2 mb-0" data-t="map.ffmpeg"></p>
     </div>
   </div>
 </div>
@@ -330,6 +331,7 @@
         "map.hide": "Leave out what lies beyond a virtual wall",
         "map.hideHelp": "For floor that is not really there: what the robot's laser saw through a window or in a mirror shows as a patch outside the home and makes the home itself smaller in the picture. Draw a virtual wall in the Roborock app between the home and the patch, longer than the place where they touch, and the patch is left off the map. A whole room that is closed off by a virtual wall stays. The Homebridge log says what was left out.",
         "map.addHelp": "After pressing Save and restarting Homebridge, add the camera to Apple Home once: Add Accessory > More options, choose the camera and enter the setup code of this plugin's bridge (the code shown next to the plugin's QR code in Homebridge). The live view needs ffmpeg on the Homebridge computer; without it the camera shows a picture that refreshes every few seconds. If you turn the camera off here later, also remove it in the Home app.",
+        "map.ffmpeg": "The live view needs ffmpeg on the Homebridge computer (the picture works without it). The plugin finds the system's own, or a copy that came with another camera plugin. If it uses another plugin's copy, the live view stops when that plugin is removed: install ffmpeg on the computer itself (on a Raspberry Pi: sudo apt install -y ffmpeg).",
         "map.demo": "This is an example home. Your own map appears here once the camera has been on for a while.",
         "map.yours": "Your robot's map, as the camera will show it.",
         "map.previewFailed": "The preview could not be drawn ({error}).",
@@ -447,6 +449,7 @@
         "map.hide": "אל תצייר שטח שנמצא מעבר לקיר וירטואלי",
         "map.hideHelp": "לשטח שלא באמת קיים: מה שהלייזר של הרובוט ראה דרך חלון או במראה מופיע ככתם מחוץ לבית ומקטין את הבית עצמו בתמונה. כשיש באפליקציית Roborock קיר וירטואלי בין הבית לכתם, ארוך יותר מהמקום שבו הם נוגעים, הכתם לא יצויר. חדר שלם שנחסם בקיר וירטואלי נשאר במפה. בלוג של Homebridge כתוב מה הושמט.",
         "map.addHelp": "אחרי לחיצה על שמירה והפעלה מחדש של Homebridge, הוסף את המצלמה ל\"בית\" פעם אחת: הוסף אביזר > אפשרויות נוספות, בחר את המצלמה והזן את קוד ההתקנה של הגשר של התוסף הזה (הקוד שמופיע ליד קוד ה-QR של התוסף ב-Homebridge). לשידור החי נדרש ffmpeg במחשב של Homebridge; בלעדיו המצלמה מציגה תמונה שמתרעננת כל כמה שניות. אם תכבה כאן את המצלמה בעתיד, הסר אותה גם באפליקציית \"בית\".",
+        "map.ffmpeg": "לשידור החי צריך את ffmpeg במחשב של Homebridge (התמונה עובדת גם בלעדיו). התוסף מוצא את זה של המערכת, או עותק שהגיע עם תוסף מצלמה אחר. אם הוא משתמש בעותק של תוסף אחר, השידור החי יפסיק כשמסירים את התוסף ההוא: התקן את ffmpeg במחשב עצמו (ב-Raspberry Pi‏: sudo apt install -y ffmpeg).",
         "map.demo": "זה בית לדוגמה. המפה שלך תופיע כאן אחרי שהמצלמה תפעל זמן מה.",
         "map.yours": "המפה של הרובוט שלך, כפי שהמצלמה תציג אותה.",
         "map.previewFailed": "לא ניתן לצייר את התצוגה המקדימה ({error}).",

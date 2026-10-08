@@ -229,11 +229,13 @@ function addFakeMatter(api) {
     assert.equal(new Set(names).size, names.length, "area names are unique");
     for (const s of area.supportedAreas) {
       assert.ok(Number.isInteger(s.areaId) && s.areaId >= 0 && s.areaId <= 0xffffffff);
-      assert.equal(s.mapId, null, "no maps are offered, so no area names one");
+      assert.ok(area.supportedMaps.some((m) => m.mapId === s.mapId), "every area is on a map that is offered");
       const name = s.areaInfo.locationInfo.locationName;
       assert.ok(typeof name === "string" && name.length >= 1 && Buffer.byteLength(name) <= 128);
     }
-    assert.ok(!("supportedMaps" in area), "no maps are offered");
+    // matter.js 0.17.9 reads supportedMaps.length when it brings the service area up: without a list it fails.
+    assert.ok(Array.isArray(area.supportedMaps) && area.supportedMaps.length >= 1, "a list of maps is offered");
+    for (const m of area.supportedMaps) assert.ok(Number.isInteger(m.mapId) && typeof m.name === "string" && m.name.length >= 1 && m.name.length <= 64);
     assert.equal(new Set(area.selectedAreas).size, area.selectedAreas.length);
     assert.ok(area.selectedAreas.every((id) => ids.includes(id)), "selected areas exist");
     assert.ok(area.currentArea === null || ids.includes(area.currentArea), "the current area exists");

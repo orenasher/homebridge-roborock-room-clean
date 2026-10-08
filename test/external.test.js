@@ -612,6 +612,35 @@ test("the map is tried over the home network first; a robot that sends none ther
   assert.equal(localMaps, 1, "the home network is not asked for a map again");
   assert.equal(run.logs.filter((l) => l.includes("no map over the home network")).length, 1);
   run.stop();
+  // Maps came over the home network, then the robot missed one answer there while the cloud brings none
+  // (as on a real S8): the home network is asked again, and the map comes back without a restart.
+  robot = { status: { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [17], answersMap: () => false };
+  run = await startPlatform({}, robot);
+  channel = run.platform.monitors.get(DUID).channel;
+  let missing = 0;
+  localMaps = 0;
+  channel.local = {
+    host: "10.0.0.9",
+    socket: {},
+    connect: async () => {},
+    close() {},
+    send: async (method) => ({ result: method === "get_status" ? [robot.status] : ["ok"] }),
+    sendMap: async (security) => {
+      localMaps++;
+      if (missing > 0) {
+        missing--;
+        throw new Error("get_map_v1: no answer from 10.0.0.9");
+      }
+      return mapAnswer(1, security.nonce, fakeMap([17]), security.endpoint);
+    },
+  };
+  assert.ok(await channel.getMap(500, 1));
+  missing = 1;
+  await channel.getMap(500, 2).catch(() => null);
+  const got = await channel.getMap(500, 3).catch(() => null);
+  assert.ok(got, "the next request reads the map over the home network again");
+  assert.equal(run.logs.filter((l) => l.includes("no map over the home network")).length, 0);
+  run.stop();
 });
 
 test("an unfinished clean of a robot that is standing still is not shown as running", async () => {

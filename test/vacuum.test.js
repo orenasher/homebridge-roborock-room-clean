@@ -69,7 +69,11 @@ test("the vacuum Home is told about: rooms, kinds of clean, battery, state", asy
   const uuid = v.UUID;
 
   // What the robot does shows in Home.
+  // A new percentage: again shown as unknown for a moment, then as it is (Home takes it then), at most once a minute.
+  t.platform.vacuums.get(DUID).nudgedAt = 0;
   await t.report({ ...DOCKED, state: 100, battery: 100 });
+  const again = t.home.updates.filter((u) => u.cluster === "powerSource").map((u) => u.attributes.batPercentRemaining);
+  assert.deepEqual(again.slice(-2), [null, 200]);
   assert.equal(v.clusters.rvcOperationalState.operationalState, 66, "docked, full");
   assert.deepEqual([v.clusters.powerSource.batPercentRemaining, v.clusters.powerSource.batChargeState], [200, 2]);
   await t.report({ ...DOCKED, state: 18, in_cleaning: 3, fan_power: 103, water_box_mode: 200, battery: 99 });

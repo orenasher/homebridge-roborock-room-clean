@@ -17,6 +17,7 @@ function frame(buf) {
 // Fake robot speaking the local "1.0" protocol on TCP.
 function fakeRobot(log) {
   const server = net.createServer((sock) => {
+    server.opened = (server.opened || 0) + 1;
     let buf = Buffer.alloc(0);
     sock.on("data", (d) => {
       buf = Buffer.concat([buf, d]);
@@ -75,4 +76,19 @@ test("local connection: hello, RPC, error, idle close", async () => {
 test("local connection fails fast when robot unreachable", async () => {
   const conn = new LocalConnection({ host: "127.0.0.1", port: 1, localKey: KEY, log: console, name: "S8" });
   await assert.rejects(conn.send("get_status", []));
+});
+
+test("a map that does not come over the home network: the connection is opened afresh for the next request", async () => {
+  const log = [];
+  const server = await fakeRobot(log);
+  const conn = new LocalConnection({ host: "127.0.0.1", port: server.address().port, localKey: KEY, log: console, name: "S8" });
+  await conn.send("get_status", []);
+  assert.equal(server.opened, 1);
+  // The robot says "ok" and sends no map.
+  await assert.rejects(conn.sendMap({ endpoint: "abcdefgh", nonce: "00112233445566778899aabbccddeeff" }, 300), /no answer/);
+  assert.equal(conn.socket, null, "the connection that brought no map is closed");
+  await conn.send("get_status", []);
+  assert.equal(server.opened, 2, "the next request opens a new connection");
+  conn.close();
+  server.close();
 });

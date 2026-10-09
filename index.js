@@ -1449,8 +1449,11 @@ class RoborockRoomCleanPlatform {
       try {
         await channel.send("app_segment_clean", [{ segments: program.segments, repeat: program.repeat }]);
       } catch (err) {
-        // Very old firmware only understands a plain list of room ids.
-        this.log.debug(`app_segment_clean with repeat failed (${err.message}), retrying legacy form.`);
+        // Very old firmware only understands a plain list of room ids, and says so. A start
+        // that got no answer is not sent again that way: the robot may well have taken it,
+        // and the plain list would replace it with a single pass.
+        if (!err.refused) throw err;
+        this.log.info(`${program.name}: the robot does not take the number of passes (${err.message}); cleaning once.`);
         await channel.send("app_segment_clean", program.segments);
       }
       program.startedAt = Date.now();

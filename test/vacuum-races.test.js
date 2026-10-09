@@ -253,3 +253,15 @@ test("a fan turned on while the robot drives home from the vacuum's clean: Home 
   assert.deepEqual(v.clusters.serviceArea.selectedAreas, [16]);
   t.stop();
 });
+
+test("the number of passes is dropped only when the robot says it does not take it", async () => {
+  // An old robot refuses the form with passes: the room is cleaned once, and the log says so.
+  const robot = { status: DOCKED, refuse: { app_segment_clean: 1 } };
+  const t = await startPlatform({}, robot, { matter: false });
+  const kitchen = t.byName("Clean מטבח");
+  kitchen.service.getCharacteristic("Active").setFn(1);
+  await wait(3000);
+  assert.deepEqual(t.sent("app_segment_clean").map((c) => c[1]), [[{ segments: [17], repeat: 2 }], [17]]);
+  assert.ok(t.said().some((l) => /does not take the number of passes/.test(l)), t.said().join("\n"));
+  t.stop();
+});

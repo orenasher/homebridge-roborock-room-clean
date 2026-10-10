@@ -566,6 +566,31 @@ test("the map comes only after a while (the Roborock app was open): the tries go
   run.stop();
 });
 
+test("a map that arrives after its request gave up is shown at once, also under the key before a renewal", async () => {
+  // Docked, so that nothing else in the plugin asks for the map meanwhile.
+  const robot = { status: { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [17], slow: { get_map_v1: 700 } };
+  const run = await startPlatform({}, robot);
+  const channel = run.platform.monitors.get(DUID).channel;
+  await wait(1500);
+  for (let n = 0; n < 50 && channel.mapFlight; n++) await wait(100);
+  const shown = [];
+  channel.onMap = (map) => shown.push(map);
+  channel.stash = null;
+  await assert.rejects(channel.getMap(200, 1));
+  assert.equal(shown.length, 0);
+  await wait(900);
+  assert.equal(shown.length, 1, "the late map went to the camera without another request");
+  assert.equal(channel.mapFails, 0);
+  // The key is renewed while an answer is on its way: that answer is still read.
+  channel.stash = null;
+  await assert.rejects(channel.getMap(200, 1));
+  run.platform.session.renewMapKey();
+  await wait(900);
+  assert.equal(shown.length, 2, run.logs.join("\n"));
+  run.stop();
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});
+
 test("the map is tried over the home network first; a robot that sends none there is asked through the cloud", async () => {
   // A robot that sends its map over the home network: the cloud is not asked at all.
   let robot = { status: { state: 18, in_cleaning: 3, fan_power: 102, water_box_mode: 200, battery: 80 }, cleaning: [16] };

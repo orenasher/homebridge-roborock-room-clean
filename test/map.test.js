@@ -362,7 +362,7 @@ test("the map is only asked for while somebody is looking, and is kept over a re
   assert.equal(channel.asked, 1);
   assert.equal(readPng(first).width, 480);
   assert.ok(view.size.width === 480);
-  // Asked again right away: the robot stands still, the same picture is good for a minute.
+  // Asked again right away: the robot stands still, the same picture is good for a few minutes.
   assert.equal(await view.snapshot(), first);
   assert.equal(channel.asked, 1);
 
@@ -400,7 +400,13 @@ test("the map is only asked for while somebody is looking, and is kept over a re
   }
   assert.equal(view.picture(), kept);
   assert.equal(said.filter((m) => /not sending its map/.test(m)).length, 1);
-  assert.ok(view.nextFetchAt - Date.now() > 30000, "a robot that does not answer is asked less often");
+  const wait1 = view.nextFetchAt - Date.now();
+  assert.ok(wait1 > 10000 && wait1 <= 15000, "while it drives, a robot that does not answer is asked less often, but at least every 15 seconds");
+  status = { state: 8, battery: 80 };
+  view.nextFetchAt = 0;
+  await view.snapshot();
+  assert.ok(view.nextFetchAt - Date.now() > 30000, "standing still: less often still");
+  status = { state: 18, battery: 97, clean_area: 2e6, clean_time: 120 };
   channel.fail = null;
 
   // A clean that ends while nobody looks: one last read, so the tile shows how it ended.
@@ -410,6 +416,10 @@ test("the map is only asked for while somebody is looking, and is kept over a re
   view.statusChanged({ state: 6, battery: 80 }, status);
   await wait(3400);
   assert.equal(channel.asked, before + 1);
+  // How the map reads went during the clean is said once, when it ends.
+  const summary = said.filter((m) => m.includes("during this clean the map was asked for"));
+  assert.equal(summary.length, 1, said.join("\n"));
+  assert.match(summary[0], /\d+ arrived .*brought none .*last: no answer/);
 
   // After a restart the kept map is there at once, without asking the robot.
   view.close();

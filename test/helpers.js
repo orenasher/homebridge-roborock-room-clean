@@ -91,6 +91,9 @@ function startFakeBroker(robotLog, robot = {}) {
           const notReady = wantsMap && robot.retries > 0 && robot.retries--;
           if (notReady) result = ["retry"];
           if (req.method === "get_room_mapping") result = robot.rooms || [[16, "111", 14], [17, "222", 14]];
+          // The child lock (S7/S8): {lock_status: 0|1}, set with the same object.
+          if (req.method === "set_child_lock_status" && req.params) robot.childLock = req.params.lock_status === 1;
+          if (req.method === "get_child_lock_status") result = { lock_status: robot.childLock ? 1 : 0 };
           if (req.method === "get_status") result = [robot.status || { state: 8, in_cleaning: 0, fan_power: 101, water_box_mode: 202, battery: 87 }];
           const ts = Math.floor(Date.now() / 1000);
           const outTopic = topic.replace("rr/m/i/", "rr/m/o/");

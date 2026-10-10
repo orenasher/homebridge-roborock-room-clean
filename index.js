@@ -29,8 +29,8 @@ const STATE_NAMES = {
  * Names the user typed and names from the Roborock app are never translated.
  */
 const TEXT = {
-  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, cleaning: (robot) => `${robot} Cleaning`, returning: (robot) => `${robot} Returning`, stopped: (robot) => `${robot} Stopped`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
-  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, cleaning: (robot) => `${robot} מנקה`, returning: (robot) => `${robot} חוזר לטעינה`, stopped: (robot) => `${robot} עצר`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
+  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, cleaning: (robot) => `${robot} Cleaning`, returning: (robot) => `${robot} Returning`, stopped: (robot) => `${robot} Stopped`, childLock: (robot) => `${robot} Child Lock`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
+  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, cleaning: (robot) => `${robot} מנקה`, returning: (robot) => `${robot} חוזר לטעינה`, stopped: (robot) => `${robot} עצר`, childLock: (robot) => `נעילת מקשים ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
 };
 
 /**
@@ -78,6 +78,7 @@ class RoborockRoomCleanPlatform {
     this.accessories = new Map(); // uuid -> PlatformAccessory (from cache)
     this.programs = new Map(); // uuid -> runtime program
     this.docks = new Map(); // duid -> charging sensor
+    this.childLocks = new Map(); // duid -> child lock switch
     this.stateSensors = new Map(); // duid -> [sensors open while the robot cleans / returns / stands stopped]
     this.monitors = new Map(); // duid -> { robot, channel, last, timer } (robot status: battery, on the dock or not)
     this.views = new Map(); // duid -> MapView (the picture of the map camera)
@@ -107,6 +108,7 @@ class RoborockRoomCleanPlatform {
       for (const camera of this.cameras) camera.close();
       for (const vacuum of this.vacuums.values()) vacuum.close();
       for (const view of this.views.values()) view.close();
+      for (const lock of this.childLocks.values()) clearTimeout(lock.timer);
       if (this.painter) this.painter.close(true);
       if (this.session) this.session.stop();
     });
@@ -241,6 +243,9 @@ class RoborockRoomCleanPlatform {
       this.stateSensors.set(robot.duid, []);
       for (const kind of STATE_SENSORS) {
         if (this.config[`${kind}Sensor`] === true) wanted.add(this.setupStateSensor(kind, robot, robots.length > 1));
+      }
+      if (this.config.childLockSwitch === true) {
+        wanted.add(this.setupChildLock(robot, channel, robots.length > 1));
       }
       for (const def of this.buildPrograms(robot, segments, robots.length > 1)) {
         wanted.add(def.uuid);
@@ -1023,6 +1028,85 @@ class RoborockRoomCleanPlatform {
     contact.getCharacteristic(Characteristic.ContactSensorState).onGet(() => this.stateSensorValue(sensor));
     contact.updateCharacteristic(Characteristic.ContactSensorState, this.stateSensorValue(sensor));
     return uuid;
+  }
+
+  /**
+   * A switch for the robot's child lock (the buttons on the robot do nothing
+   * while it is on). What the robot says is read at the start, every 10
+   * minutes (a change made in the Roborock app shows up then) and after each change.
+   */
+  setupChildLock(robot, channel, multiRobot) {
+    const { Service, Characteristic } = this.api.hap;
+    const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${robot.duid}:childlock`);
+    const own = this.config.childLockSwitchName;
+    const base = own || this.text.childLock(robot.name);
+    const name = multiRobot && own ? `${base} (${robot.name})` : base;
+    let accessory = this.accessories.get(uuid);
+    const nameChanged = !accessory || accessory.context.name !== name;
+    if (!accessory) {
+      accessory = new this.api.platformAccessory(name, uuid);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      this.accessories.set(uuid, accessory);
+      this.log.info(`Added "${name}".`);
+    }
+    accessory.context.name = name;
+    accessory
+      .getService(Service.AccessoryInformation)
+      .setCharacteristic(Characteristic.Manufacturer, "Roborock")
+      .setCharacteristic(Characteristic.Model, robot.name || "Robot vacuum")
+      .setCharacteristic(Characteristic.SerialNumber, `${robot.sn || robot.duid}-childlock`);
+    const service = accessory.getService(Service.Switch) || accessory.addService(Service.Switch, name);
+    service.setCharacteristic(Characteristic.Name, name);
+    if (Characteristic.ConfiguredName && nameChanged) {
+      if (!service.testCharacteristic(Characteristic.ConfiguredName)) service.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      service.setCharacteristic(Characteristic.ConfiguredName, name);
+    }
+    const lock = { robot, channel, accessory, service, on: accessory.context.locked === true, timer: null, said: false };
+    this.childLocks.set(robot.duid, lock);
+    const on = service.getCharacteristic(Characteristic.On);
+    on.onGet(() => lock.on);
+    on.onSet(async (value) => {
+      const want = !!value;
+      try {
+        await channel.send("set_child_lock_status", { lock_status: want ? 1 : 0 });
+        this.showChildLock(lock, want);
+        this.log.info(`${name}: ${want ? "on (the buttons on the robot are locked)" : "off"}.`);
+      } catch (err) {
+        this.log.warn(`${name}: could not ${want ? "lock" : "unlock"} the buttons (${err.message}).`);
+        setTimeout(() => on.updateValue(lock.on), 300);
+        return;
+      }
+      setTimeout(() => this.readChildLock(lock), 3000).unref?.();
+    });
+    on.updateValue(lock.on);
+    this.readChildLock(lock);
+    return uuid;
+  }
+
+  showChildLock(lock, value) {
+    lock.on = value;
+    lock.accessory.context.locked = value;
+    lock.service.updateCharacteristic(this.api.hap.Characteristic.On, value);
+  }
+
+  async readChildLock(lock) {
+    clearTimeout(lock.timer);
+    if (this.stopped) return;
+    try {
+      const answer = await lock.channel.send("get_child_lock_status", [], { background: true });
+      const item = Array.isArray(answer) ? answer[0] : answer;
+      const status = item && typeof item === "object" ? item.lock_status : item;
+      if (status === 0 || status === 1) this.showChildLock(lock, status === 1);
+      else if (!lock.said) {
+        lock.said = true;
+        this.log.warn(`${lock.accessory.context.name}: the robot gave no child lock status (${JSON.stringify(answer)}); it may not have a child lock.`);
+      }
+    } catch (err) {
+      this.log.debug(`${lock.accessory.context.name}: child lock status not read (${err.message}).`);
+    }
+    if (this.stopped) return;
+    lock.timer = setTimeout(() => this.readChildLock(lock), this.childLockEveryMs || 10 * 60 * 1000);
+    lock.timer.unref?.();
   }
 
   /** Whether the robot is in the situation a state sensor of that kind is open for. */

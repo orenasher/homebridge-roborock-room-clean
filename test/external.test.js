@@ -836,3 +836,29 @@ test("state sensors: cleaning, returning and stopped are each open only in their
   run.stop();
   assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
 });
+
+test("child lock switch: shows what the robot says, locks and unlocks it; off by default", async () => {
+  const robot = { status: { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, battery: 90 }, childLock: true };
+  let run = await startPlatform({}, robot);
+  assert.ok(!run.api.registered.some((a) => /Child Lock/.test(a.displayName)));
+  run.stop();
+
+  run = await startPlatform({ childLockSwitch: true }, robot);
+  assert.ok(run.api.registered.some((a) => a.displayName === "S8 Child Lock"), run.api.registered.map((a) => a.displayName).join(", "));
+  const lock = run.platform.childLocks.get(DUID);
+  const on = lock.service.getCharacteristic(run.api.hap.Characteristic.On);
+  for (let n = 0; n < 40 && !lock.on; n++) await wait(100);
+  assert.equal(lock.on, true, "locked in the Roborock app before: shown as on");
+  await on.setFn(false);
+  assert.equal(robot.childLock, false, "the robot was unlocked");
+  assert.equal(on.value, false);
+  assert.ok(run.robotLog.some((l) => /set_child_lock_status/.test(JSON.stringify(l))), "sent to the robot");
+  await on.setFn(true);
+  assert.equal(robot.childLock, true);
+  // Changed in the Roborock app: picked up at the next read.
+  robot.childLock = false;
+  await run.platform.readChildLock(lock);
+  assert.equal(on.value, false);
+  run.stop();
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});

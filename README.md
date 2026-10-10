@@ -39,6 +39,8 @@ Three more contact sensors can be turned on, each **open** in one situation only
 
 A clean from start to end: cleaning opens; at the end cleaning closes and returning opens; on the dock returning closes and the charging sensor closes. Rename them with `cleaningSensorName`, `returningSensorName` and `stoppedSensorName`.
 
+**Child lock.** `childLockSwitch: true` adds a switch for the robot's child lock: on locks the buttons on the robot, off unlocks them. A change made in the Roborock app shows up within 10 minutes. Rename it with `childLockSwitchName`.
+
 ## Supported robots
 
 Roborock robots that use the standard "1.0" protocol: S-series (S5 – S8 family), Q-series, Q Revo, Saros and similar. The 2025 Q7 series (B01 protocol) is not supported yet.

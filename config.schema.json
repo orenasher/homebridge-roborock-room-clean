@@ -528,6 +528,18 @@
         "placeholder": "S8 Stopped",
         "description": "Default: the robot's name + \"Stopped\", e.g. \"S8 Stopped\". You can write e.g. \"השואב עצר\"."
       },
+      "childLockSwitch": {
+        "title": "Add a child lock switch for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A switch for the robot's child lock: on locks the buttons on the robot, off unlocks them. A change made in the Roborock app shows up within 10 minutes."
+      },
+      "childLockSwitchName": {
+        "title": "Child lock switch name",
+        "type": "string",
+        "placeholder": "S8 Child Lock",
+        "description": "Default: the robot's name + \"Child Lock\", e.g. \"S8 Child Lock\". You can write e.g. \"נעילת מקשים שואב\"."
+      },
       "statusInterval": {
         "title": "Check the robot's status every (seconds)",
         "type": "integer",
@@ -565,7 +577,7 @@
     },
     {
       "type": "fieldset",
-      "title": "Sensors and battery",
+      "title": "Sensors, child lock and battery",
       "expandable": true,
       "items": [
         "batteryOnFans",
@@ -577,6 +589,8 @@
         "returningSensorName",
         "stoppedSensor",
         "stoppedSensorName",
+        "childLockSwitch",
+        "childLockSwitchName",
         "statusInterval"
       ]
     },

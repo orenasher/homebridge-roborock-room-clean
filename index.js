@@ -29,8 +29,8 @@ const STATE_NAMES = {
  * Names the user typed and names from the Roborock app are never translated.
  */
 const TEXT = {
-  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
-  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
+  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, cleaning: (robot) => `${robot} Cleaning`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
+  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, cleaning: (robot) => `${robot} מנקה`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
 };
 
 /**
@@ -76,6 +76,7 @@ class RoborockRoomCleanPlatform {
     this.accessories = new Map(); // uuid -> PlatformAccessory (from cache)
     this.programs = new Map(); // uuid -> runtime program
     this.docks = new Map(); // duid -> charging sensor
+    this.cleaningSensors = new Map(); // duid -> cleaning sensor
     this.monitors = new Map(); // duid -> { robot, channel, last, timer } (robot status: battery, on the dock or not)
     this.views = new Map(); // duid -> MapView (the picture of the map camera)
     this.cameras = [];
@@ -234,6 +235,9 @@ class RoborockRoomCleanPlatform {
       }
       if (this.config.chargingSensor !== false) {
         wanted.add(this.setupChargingSensor(robot, channel, robots.length > 1));
+      }
+      if (this.config.cleaningSensor === true) {
+        wanted.add(this.setupCleaningSensor(robot, robots.length > 1));
       }
       for (const def of this.buildPrograms(robot, segments, robots.length > 1)) {
         wanted.add(def.uuid);
@@ -907,6 +911,7 @@ class RoborockRoomCleanPlatform {
       if (vacuum) vacuum.statusChanged();
     }
     this.updateChargingSensor(duid, status);
+    this.updateCleaningSensor(duid, status);
     for (const program of this.programs.values()) {
       if (program.robot.duid === duid) this.applyFanBattery(program);
     }
@@ -977,6 +982,66 @@ class RoborockRoomCleanPlatform {
   lowBatteryValue(last) {
     const C = this.api.hap.Characteristic.StatusLowBattery;
     return last && last.battery <= 20 ? C.BATTERY_LEVEL_LOW : C.BATTERY_LEVEL_NORMAL;
+  }
+
+  /**
+   * A contact sensor that is open while the robot is cleaning and closed
+   * otherwise (paused, stopped, on its way back, on the dock).
+   */
+  setupCleaningSensor(robot, multiRobot) {
+    const { Service, Characteristic } = this.api.hap;
+    const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${robot.duid}:cleaning`);
+    const base = this.config.cleaningSensorName || this.text.cleaning(robot.name);
+    const name = multiRobot && this.config.cleaningSensorName ? `${base} (${robot.name})` : base;
+    let accessory = this.accessories.get(uuid);
+    const nameChanged = !accessory || accessory.context.name !== name;
+    if (!accessory) {
+      accessory = new this.api.platformAccessory(name, uuid);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      this.accessories.set(uuid, accessory);
+      this.log.info(`Added "${name}".`);
+    }
+    accessory.context.name = name;
+    accessory
+      .getService(Service.AccessoryInformation)
+      .setCharacteristic(Characteristic.Manufacturer, "Roborock")
+      .setCharacteristic(Characteristic.Model, robot.name || "Robot vacuum")
+      .setCharacteristic(Characteristic.SerialNumber, `${robot.sn || robot.duid}-cleaning`);
+    const contact = accessory.getService(Service.ContactSensor) || accessory.addService(Service.ContactSensor, name);
+    contact.setCharacteristic(Characteristic.Name, name);
+    if (Characteristic.ConfiguredName && nameChanged) {
+      if (!contact.testCharacteristic(Characteristic.ConfiguredName)) contact.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      contact.setCharacteristic(Characteristic.ConfiguredName, name);
+    }
+    const sensor = { robot, accessory, contact, last: accessory.context.last || null };
+    this.cleaningSensors.set(robot.duid, sensor);
+    contact.getCharacteristic(Characteristic.ContactSensorState).onGet(() => this.cleaningValue(sensor.last));
+    contact.updateCharacteristic(Characteristic.ContactSensorState, this.cleaningValue(sensor.last));
+    return uuid;
+  }
+
+  /** Cleaning: the cleaning states, and emptying the bin or washing the mop in the middle of a clean. */
+  static isCleaningNow(last) {
+    if (!last) return false;
+    if (CLEANING_STATES.has(last.state)) return true;
+    return [22, 23, 26].includes(last.state) && !!last.inCleaning;
+  }
+
+  cleaningValue(last) {
+    const C = this.api.hap.Characteristic.ContactSensorState;
+    return RoborockRoomCleanPlatform.isCleaningNow(last) ? C.CONTACT_NOT_DETECTED : C.CONTACT_DETECTED;
+  }
+
+  updateCleaningSensor(duid, status) {
+    const sensor = this.cleaningSensors.get(duid);
+    if (!sensor || !status || typeof status.state !== "number") return;
+    const was = RoborockRoomCleanPlatform.isCleaningNow(sensor.last);
+    const inCleaning = status.in_cleaning !== undefined ? Number(status.in_cleaning) : sensor.last ? sensor.last.inCleaning : 0;
+    sensor.last = { state: status.state, inCleaning };
+    sensor.accessory.context.last = sensor.last;
+    const now = RoborockRoomCleanPlatform.isCleaningNow(sensor.last);
+    if (was !== now) this.log.info(`${sensor.robot.name}: ${now ? "cleaning" : "not cleaning"}.`);
+    sensor.contact.updateCharacteristic(this.api.hap.Characteristic.ContactSensorState, this.cleaningValue(sensor.last));
   }
 
   updateChargingSensor(duid, status) {

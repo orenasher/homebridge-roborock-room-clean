@@ -492,6 +492,18 @@
         "placeholder": "S8 Charging",
         "description": "Default: the robot's name + \"Charging\", e.g. \"S8 Charging\". You can write e.g. \"שואב בטעינה\"."
       },
+      "cleaningSensor": {
+        "title": "Add a cleaning sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor: open while the robot is cleaning, closed while it is not (paused, stopped, on its way back or on the dock). For automations, e.g. \"when the vacuum starts cleaning\"."
+      },
+      "cleaningSensorName": {
+        "title": "Cleaning sensor name",
+        "type": "string",
+        "placeholder": "S8 Cleaning",
+        "description": "Default: the robot's name + \"Cleaning\", e.g. \"S8 Cleaning\". You can write e.g. \"השואב מנקה\"."
+      },
       "statusInterval": {
         "title": "Check the robot's status every (seconds)",
         "type": "integer",
@@ -529,12 +541,14 @@
     },
     {
       "type": "fieldset",
-      "title": "Charging sensor and battery",
+      "title": "Charging sensor, cleaning sensor and battery",
       "expandable": true,
       "items": [
         "batteryOnFans",
         "chargingSensor",
         "chargingSensorName",
+        "cleaningSensor",
+        "cleaningSensorName",
         "statusInterval"
       ]
     },

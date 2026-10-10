@@ -106,7 +106,7 @@ Apple Home knows robot vacuums only through **Matter**. Homebridge 2 has Matter 
 
 **Setting it up**
 
-1. In the Homebridge UI, on the Plugins page, open this plugin's menu, choose **Child Bridge Config** and turn on **Enable Matter**. ("Externals Only (Matter)" can be turned on too.) If the plugin runs on the main bridge instead of a bridge of its own, turn Matter on for the main bridge in the Homebridge settings: Matter has to be on for the bridge the plugin runs on.
+1. In the Homebridge UI, on the Plugins page, open this plugin's menu, choose **Child Bridge Config** and turn on **Enable Matter**. If the plugin runs on the main bridge instead of a bridge of its own, turn Matter on for the main bridge in the Homebridge settings: Matter has to be on for the bridge the plugin runs on.
 2. Turn on **Robot vacuum** in the plugin settings, save, and restart Homebridge. The settings page says whether Matter is on for the bridge.
 3. The Homebridge log now has the lines `Commissioning codes for <robot>` with a **Manual Code**. In the Home app choose **Add Accessory > More options**, pick the vacuum and enter that code.
 
@@ -122,6 +122,7 @@ Apple Home knows robot vacuums only through **Matter**. Homebridge 2 has Matter 
 Good to know:
 
 - Home takes the list of kinds of clean on the day the vacuum is added. The list follows `enableMaxPlus`, so set that first. A level added later shows after you remove the vacuum from the Home app and add it again; a level that was offered once stays offered.
+- With Matter on, Homebridge also publishes an empty Matter bridge for the plugin's bridge (the QR code under "Enable Matter" in Child Bridge Config). Apple Home lists it under "Add Accessory" with the bridge's name. Do not add it: there is nothing on it, the vacuum is paired with its own code. Turn on **Hide Pairing Alert** there so Homebridge does not keep reminding you of it.
 - The vacuum is published once the robot has answered and its rooms are known. A robot without rooms on its map is not published: Home does not take a robot vacuum without rooms.
 - What Homebridge holds for the vacuum is compared with the robot every minute and put right when it differs, so a missed update does not stay.
 - The battery percentage under the vacuum can stay behind in the Home app: Matter does not send its changes, and Home reads it only now and then. After every Homebridge start the plugin shows it as unknown for a moment and then as it is, so Home takes the real value then; between starts Home may keep showing an older percentage (sending it more often was tried and does not help). The fans, the routine switches and the charging sensor always show the current battery.

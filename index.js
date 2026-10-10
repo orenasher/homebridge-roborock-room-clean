@@ -29,8 +29,8 @@ const STATE_NAMES = {
  * Names the user typed and names from the Roborock app are never translated.
  */
 const TEXT = {
-  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
-  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
+  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, cleaning: (robot) => `${robot} Cleaning`, returning: (robot) => `${robot} Returning`, stopped: (robot) => `${robot} Stopped`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
+  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, cleaning: (robot) => `${robot} מנקה`, returning: (robot) => `${robot} חוזר לטעינה`, stopped: (robot) => `${robot} עצר`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
 };
 
 /**
@@ -59,6 +59,8 @@ const CLOSE_WATCH_STEP_MS = 4000;
 
 /** States in which the robot is actively cleaning (not returning, charging or paused). */
 const CLEANING_STATES = new Set([5, 11, 17, 18]);
+// Optional contact sensors, each open in one situation (see setupStateSensor).
+const STATE_SENSORS = ["cleaning", "returning", "stopped"];
 
 /** When the robot would not say which rooms it is cleaning, do not ask again for a while. */
 const NO_MAP_PAUSE_MS = 10 * 60 * 1000;
@@ -76,6 +78,7 @@ class RoborockRoomCleanPlatform {
     this.accessories = new Map(); // uuid -> PlatformAccessory (from cache)
     this.programs = new Map(); // uuid -> runtime program
     this.docks = new Map(); // duid -> charging sensor
+    this.stateSensors = new Map(); // duid -> [sensors open while the robot cleans / returns / stands stopped]
     this.monitors = new Map(); // duid -> { robot, channel, last, timer } (robot status: battery, on the dock or not)
     this.views = new Map(); // duid -> MapView (the picture of the map camera)
     this.cameras = [];
@@ -234,6 +237,10 @@ class RoborockRoomCleanPlatform {
       }
       if (this.config.chargingSensor !== false) {
         wanted.add(this.setupChargingSensor(robot, channel, robots.length > 1));
+      }
+      this.stateSensors.set(robot.duid, []);
+      for (const kind of STATE_SENSORS) {
+        if (this.config[`${kind}Sensor`] === true) wanted.add(this.setupStateSensor(kind, robot, robots.length > 1));
       }
       for (const def of this.buildPrograms(robot, segments, robots.length > 1)) {
         wanted.add(def.uuid);
@@ -907,6 +914,7 @@ class RoborockRoomCleanPlatform {
       if (vacuum) vacuum.statusChanged();
     }
     this.updateChargingSensor(duid, status);
+    this.updateStateSensors(duid, status);
     for (const program of this.programs.values()) {
       if (program.robot.duid === duid) this.applyFanBattery(program);
     }
@@ -977,6 +985,76 @@ class RoborockRoomCleanPlatform {
   lowBatteryValue(last) {
     const C = this.api.hap.Characteristic.StatusLowBattery;
     return last && last.battery <= 20 ? C.BATTERY_LEVEL_LOW : C.BATTERY_LEVEL_NORMAL;
+  }
+
+  /**
+   * A contact sensor that is open while the robot is in one situation and
+   * closed otherwise: `cleaning`, `returning` (on its way back to the dock) or
+   * `stopped` (standing off the dock without cleaning: paused, stopped, stuck).
+   */
+  setupStateSensor(kind, robot, multiRobot) {
+    const { Service, Characteristic } = this.api.hap;
+    const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${robot.duid}:${kind}`);
+    const own = this.config[`${kind}SensorName`];
+    const base = own || this.text[kind](robot.name);
+    const name = multiRobot && own ? `${base} (${robot.name})` : base;
+    let accessory = this.accessories.get(uuid);
+    const nameChanged = !accessory || accessory.context.name !== name;
+    if (!accessory) {
+      accessory = new this.api.platformAccessory(name, uuid);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      this.accessories.set(uuid, accessory);
+      this.log.info(`Added "${name}".`);
+    }
+    accessory.context.name = name;
+    accessory
+      .getService(Service.AccessoryInformation)
+      .setCharacteristic(Characteristic.Manufacturer, "Roborock")
+      .setCharacteristic(Characteristic.Model, robot.name || "Robot vacuum")
+      .setCharacteristic(Characteristic.SerialNumber, `${robot.sn || robot.duid}-${kind}`);
+    const contact = accessory.getService(Service.ContactSensor) || accessory.addService(Service.ContactSensor, name);
+    contact.setCharacteristic(Characteristic.Name, name);
+    if (Characteristic.ConfiguredName && nameChanged) {
+      if (!contact.testCharacteristic(Characteristic.ConfiguredName)) contact.addOptionalCharacteristic(Characteristic.ConfiguredName);
+      contact.setCharacteristic(Characteristic.ConfiguredName, name);
+    }
+    const sensor = { kind, robot, accessory, contact, last: accessory.context.last || null };
+    this.stateSensors.get(robot.duid).push(sensor);
+    contact.getCharacteristic(Characteristic.ContactSensorState).onGet(() => this.stateSensorValue(sensor));
+    contact.updateCharacteristic(Characteristic.ContactSensorState, this.stateSensorValue(sensor));
+    return uuid;
+  }
+
+  /** Whether the robot is in the situation a state sensor of that kind is open for. */
+  static inSituation(kind, last) {
+    if (!last || typeof last.state !== "number") return false;
+    const state = last.state;
+    if (kind === "cleaning") {
+      // Also emptying the bin or washing the mop in the middle of a clean.
+      return CLEANING_STATES.has(state) || ([22, 23, 26].includes(state) && !!last.inCleaning);
+    }
+    if (kind === "returning") return state === 6 || state === 15;
+    if (kind === "stopped") return [2, 3, 10, 12].includes(state);
+    return false;
+  }
+
+  stateSensorValue(sensor) {
+    const C = this.api.hap.Characteristic.ContactSensorState;
+    return RoborockRoomCleanPlatform.inSituation(sensor.kind, sensor.last) ? C.CONTACT_NOT_DETECTED : C.CONTACT_DETECTED;
+  }
+
+  updateStateSensors(duid, status) {
+    const sensors = this.stateSensors.get(duid);
+    if (!sensors || !sensors.length || !status || typeof status.state !== "number") return;
+    for (const sensor of sensors) {
+      const was = RoborockRoomCleanPlatform.inSituation(sensor.kind, sensor.last);
+      const inCleaning = status.in_cleaning !== undefined ? Number(status.in_cleaning) : sensor.last ? sensor.last.inCleaning : 0;
+      sensor.last = { state: status.state, inCleaning };
+      sensor.accessory.context.last = sensor.last;
+      const now = RoborockRoomCleanPlatform.inSituation(sensor.kind, sensor.last);
+      if (was !== now) this.log.info(`${sensor.accessory.context.name}: ${now ? "open" : "closed"} (state ${status.state}).`);
+      sensor.contact.updateCharacteristic(this.api.hap.Characteristic.ContactSensorState, this.stateSensorValue(sensor));
+    }
   }
 
   updateChargingSensor(duid, status) {

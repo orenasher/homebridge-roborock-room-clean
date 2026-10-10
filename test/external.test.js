@@ -800,3 +800,39 @@ test("language: Hebrew gives Hebrew default names, typed names are kept", async 
   assert.deepEqual(run.api.registered.map((a) => a.displayName).sort(), ["Clean מטבח", "Clean סלון", "S8 Charging"].sort());
   run.stop();
 });
+
+test("state sensors: cleaning, returning and stopped are each open only in their own situation; off by default", async () => {
+  const robot = { status: { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, battery: 90 } };
+  // Off unless asked for.
+  let run = await startPlatform({}, robot);
+  assert.ok(!run.api.registered.some((a) => /Cleaning|Returning|Stopped/.test(a.displayName)), run.api.registered.map((a) => a.displayName).join(", "));
+  run.stop();
+
+  run = await startPlatform({ language: "he", cleaningSensor: true, returningSensor: true, stoppedSensor: true, stoppedSensorName: "השואב עצר" }, robot);
+  const names = run.api.registered.map((a) => a.displayName);
+  for (const name of ["S8 מנקה", "S8 חוזר לטעינה", "השואב עצר"]) assert.ok(names.includes(name), names.join(", "));
+  const C = run.api.hap.Characteristic.ContactSensorState;
+  const sensors = Object.fromEntries(run.platform.stateSensors.get(DUID).map((s) => [s.kind, s]));
+  const open = () => Object.entries(sensors).filter(([, s]) => s.contact.getCharacteristic(C).value === C.CONTACT_NOT_DETECTED).map(([k]) => k).sort();
+  const say = (state, inCleaning = 0) => run.platform.updateStateSensors(DUID, { state, in_cleaning: inCleaning, battery: 80 });
+
+  say(8);
+  assert.deepEqual(open(), [], "on the dock: all closed");
+  say(18, 3);
+  assert.deepEqual(open(), ["cleaning"]);
+  say(26, 3);
+  assert.deepEqual(open(), ["cleaning"], "going to wash the mop in the middle of a clean is still the clean");
+  say(10, 3);
+  assert.deepEqual(open(), ["stopped"], "paused");
+  say(15, 0);
+  assert.deepEqual(open(), ["returning"]);
+  say(12);
+  assert.deepEqual(open(), ["stopped"], "stuck");
+  say(6);
+  assert.deepEqual(open(), ["returning"]);
+  run.platform.updateStateSensors(DUID, { state: 100, battery: 100 });
+  assert.deepEqual(open(), [], "charged on the dock");
+  assert.ok(run.logs.some((l) => l === "S8 מנקה: open (state 18)."), run.logs.join("\n"));
+  run.stop();
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});

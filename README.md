@@ -21,13 +21,23 @@ The routines you do have in the Roborock app can be added too, each as a **switc
 - Pure Node.js, with no Python, no Home Assistant, no extra scripts and no other Homebridge plugin needed.
 - The Roborock login, cached room list and each fan's last speed live inside Homebridge's own storage folder. A **Homebridge UI backup** includes all of it. After restoring a backup the plugin is reinstalled from npm and works again with no new login.
 
-## Charging sensor and battery
+## Sensors and battery
 
 Every fan and routine switch also shows the robot's **battery level** and whether it is **charging** (on the dock): open its settings in Apple Home. Turn it off with `batteryOnFans: false`.
 
 Status changes show up quickly: the robot reports them itself through the cloud connection, the plugin checks right after a fan starts or stops a clean, and it asks every 30 seconds while the robot is away from the dock (every `statusInterval` seconds on the dock).
 
 For each robot the plugin also adds a **contact sensor**: **closed** while the robot is on the dock charging (or fully charged), **open** while it is off the dock. The same accessory shows the **battery level** (and a low-battery warning under 20%). Use it in automations, e.g. "when the vacuum leaves the dock". Set `chargingSensorName` to rename it, or `chargingSensor: false` to turn it off. Turn the sensor off if the battery on the fans is enough for you.
+
+Three more contact sensors can be turned on, each **open** in one situation only and **closed** otherwise. They are off by default. Apple Home cannot run automations on the Matter vacuum, but it can on these, and it can notify you when one opens (the sensor's settings > Status and Notifications).
+
+| Setting | Open while the robot... |
+|---|---|
+| `cleaningSensor` | is cleaning (also while it washes the mop or empties the bin in the middle of a clean) |
+| `returningSensor` | is on its way back to the dock (once it is there, the charging sensor closes) |
+| `stoppedSensor` | stands off the dock without cleaning: paused, stopped, stuck or in error |
+
+A clean from start to end: cleaning opens; at the end cleaning closes and returning opens; on the dock returning closes and the charging sensor closes. Rename them with `cleaningSensorName`, `returningSensorName` and `stoppedSensorName`.
 
 ## Supported robots
 

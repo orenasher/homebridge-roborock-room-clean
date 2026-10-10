@@ -492,6 +492,42 @@
         "placeholder": "S8 Charging",
         "description": "Default: the robot's name + \"Charging\", e.g. \"S8 Charging\". You can write e.g. \"שואב בטעינה\"."
       },
+      "cleaningSensor": {
+        "title": "Add a cleaning sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor: open while the robot is cleaning, closed otherwise (paused, stopped, on its way back or on the dock). For automations and notifications, e.g. \"when the vacuum starts cleaning\"."
+      },
+      "cleaningSensorName": {
+        "title": "Cleaning sensor name",
+        "type": "string",
+        "placeholder": "S8 Cleaning",
+        "description": "Default: the robot's name + \"Cleaning\", e.g. \"S8 Cleaning\". You can write e.g. \"השואב מנקה\"."
+      },
+      "returningSensor": {
+        "title": "Add a returning sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor: open while the robot is on its way back to the dock, closed otherwise. Once it is on the dock, the charging sensor closes."
+      },
+      "returningSensorName": {
+        "title": "Returning sensor name",
+        "type": "string",
+        "placeholder": "S8 Returning",
+        "description": "Default: the robot's name + \"Returning\", e.g. \"S8 Returning\". You can write e.g. \"השואב חוזר לטעינה\"."
+      },
+      "stoppedSensor": {
+        "title": "Add a stopped sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor: open while the robot stands off the dock without cleaning (paused, stopped, stuck or in error), closed otherwise."
+      },
+      "stoppedSensorName": {
+        "title": "Stopped sensor name",
+        "type": "string",
+        "placeholder": "S8 Stopped",
+        "description": "Default: the robot's name + \"Stopped\", e.g. \"S8 Stopped\". You can write e.g. \"השואב עצר\"."
+      },
       "statusInterval": {
         "title": "Check the robot's status every (seconds)",
         "type": "integer",
@@ -529,12 +565,18 @@
     },
     {
       "type": "fieldset",
-      "title": "Charging sensor and battery",
+      "title": "Sensors and battery",
       "expandable": true,
       "items": [
         "batteryOnFans",
         "chargingSensor",
         "chargingSensorName",
+        "cleaningSensor",
+        "cleaningSensorName",
+        "returningSensor",
+        "returningSensorName",
+        "stoppedSensor",
+        "stoppedSensorName",
         "statusInterval"
       ]
     },

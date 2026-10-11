@@ -300,6 +300,7 @@ test("a robot that does not name its room (S8): Home's line follows the robot on
   const { demoMap } = require("../lib/demo-map");
   const robot = { status: DOCKED };
   const t = await startPlatform({ matterVacuum: true }, robot);
+  t.platform.roomDwellMs = 0; // the stay that makes a room count is looked at below
   const v = await t.published();
   // The whole home, started in the Roborock app (or a routine): no room is known at first.
   robot.map = demoMap(); // no room marked yet: the whole home
@@ -318,5 +319,24 @@ test("a robot that does not name its room (S8): Home's line follows the robot on
   await channel.getMap(3000, 2);
   await wait(1200);
   assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 1, 17: 3 }, 16]);
+  // Only driving through a room on the way: it is not shown as cleaned.
+  t.platform.roomDwellMs = 1500;
+  robot.map = demoMap({ cleaning: [17] });
+  channel.stash = null;
+  await channel.getMap(3000, 3);
+  await wait(800);
+  robot.map = demoMap({ cleaning: [16] });
+  channel.stash = null;
+  await channel.getMap(3000, 4);
+  await wait(800);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 1, 17: 3 }, 16], "the kitchen was only passed through");
+  // Staying in it: it counts.
+  robot.map = demoMap({ cleaning: [17] });
+  for (let n = 0; n < 3; n++) {
+    channel.stash = null;
+    await channel.getMap(3000, 5 + n);
+    await wait(800);
+  }
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 1 }, 17]);
   t.stop();
 });

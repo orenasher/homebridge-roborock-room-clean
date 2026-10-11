@@ -1122,32 +1122,51 @@ class RoborockRoomCleanPlatform {
 
   /**
    * The room the robot is in, for the vacuum in Apple Home: read from where the map puts the
-   * robot (S8 and others do not name the room in their status). Every map that arrives is
-   * used; while the robot cleans one is asked for every 20 seconds.
+   * robot (S8 and others do not name the room in their status). Every map that arrives while
+   * the robot cleans is used; one is asked for every 15 seconds. A room counts only once the
+   * robot has stayed in it for a while (40 seconds): driving through a room on the way to the
+   * next one does not make it "being cleaned", nor "done" afterwards.
    */
   followRoom(robot, channel, vacuum) {
     const duid = robot.duid;
+    const cleaning = () => {
+      const monitor = this.monitors.get(duid);
+      const status = monitor && (monitor.last || monitor.full);
+      return !!status && CLEANING_STATES.has(status.state);
+    };
     const before = channel.onMap;
     channel.onMap = (map) => {
       if (before) before(map);
-      const room = roomAt(map);
-      const last = this.roomsNow.get(duid);
-      this.roomsNow.set(duid, { room, at: Date.now() });
-      if (room != null && (!last || last.room !== room)) {
-        this.log.debug(`${robot.name}: in room ${room} now.`);
-        vacuum.statusChanged();
+      const now = Date.now();
+      const seen = this.roomsNow.get(duid) || { room: null, at: 0, candidate: null, since: 0 };
+      if (!cleaning()) {
+        // On the dock, or stopped: the next clean starts afresh.
+        this.roomsNow.set(duid, { room: null, at: 0, candidate: null, since: 0 });
+        return;
       }
+      const room = roomAt(map);
+      if (room !== seen.candidate) {
+        seen.candidate = room;
+        seen.since = now;
+      }
+      seen.at = now;
+      const dwell = this.roomDwellMs === undefined ? 40000 : this.roomDwellMs;
+      if (room != null && room !== seen.room && now - seen.since >= dwell) {
+        seen.room = room;
+        this.log.debug(`${robot.name}: cleaning room ${room} now.`);
+        this.roomsNow.set(duid, seen);
+        vacuum.statusChanged();
+        return;
+      }
+      this.roomsNow.set(duid, seen);
     };
     let attempt = 0;
     const timer = setInterval(() => {
-      if (this.stopped) return;
-      const monitor = this.monitors.get(duid);
-      const status = monitor && (monitor.last || monitor.full);
-      if (!status || !CLEANING_STATES.has(status.state)) return;
+      if (this.stopped || !cleaning()) return;
       const last = this.roomsNow.get(duid);
-      if (last && Date.now() - last.at < 18000) return;
+      if (last && Date.now() - last.at < 13000) return;
       channel.getMap(10000, ++attempt).catch((err) => this.log.debug(`${robot.name}: no map for the room (${err.message}).`));
-    }, this.roomEveryMs || 20000);
+    }, this.roomEveryMs || 15000);
     timer.unref?.();
     this.roomTimers.set(duid, timer);
   }

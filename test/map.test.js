@@ -694,3 +694,9 @@ test("with the map camera on, a clean started in the Roborock app still lights i
     t.stop();
   }
 });
+
+test("the room the robot stands in is read from the map", () => {
+  const { roomAt } = require("../lib/rrmap");
+  for (const room of [16, 17, 18, 19, 20, 21]) assert.equal(roomAt(demoMap({ cleaning: [room] })), room);
+  assert.equal(roomAt(Buffer.from("not a map")), null);
+});

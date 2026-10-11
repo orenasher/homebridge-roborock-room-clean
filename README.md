@@ -114,7 +114,7 @@ Apple Home knows robot vacuums only through **Matter**. Homebridge 2 has Matter 
 
 - The fans, routine switches, charging sensor and map camera stay exactly as they are; use whichever you like.
 - A clean started from the vacuum also shows on the fan (or routine switch) of exactly those rooms, unless `followExternal` is turned off. A clean started from a fan, a routine switch or the Roborock app shows on the vacuum.
-- Home's line under the vacuum names the room being cleaned. For several rooms it names the first one until the robot itself says where it is (newer robots do); for the whole home it names none.
+- Home's line under the vacuum names the room being cleaned, also for the whole home and for routines. Newer robots name the room they are in; for the others (the S8 among them) the room is read from where the live map puts the robot: while the robot cleans, the plugin reads the map every 20 seconds.
 - One room is cleaned with the passes set for that room; several rooms with the default `repeat`; the whole home the way the robot itself is set.
 - With `restoreSettings` (the default) the robot's own suction and water setting are put back when a clean started from the vacuum ends.
 - **Stop** stops the robot where it is. **Send to dock** takes it home.

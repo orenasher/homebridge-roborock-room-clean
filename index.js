@@ -1,5 +1,6 @@
 "use strict";
 
+const { roomAt } = require("./lib/rrmap");
 const fs = require("fs");
 const path = require("path");
 const cloud = require("./lib/cloud");
@@ -79,6 +80,8 @@ class RoborockRoomCleanPlatform {
     this.programs = new Map(); // uuid -> runtime program
     this.docks = new Map(); // duid -> charging sensor
     this.childLocks = new Map(); // duid -> child lock switch
+    this.roomsNow = new Map(); // duid -> { room, at }: the room the robot was in on the last map
+    this.roomTimers = new Map(); // duid -> timer reading the map while the robot cleans (for the vacuum's room)
     this.stateSensors = new Map(); // duid -> [sensors open while the robot cleans / returns / stands stopped]
     this.monitors = new Map(); // duid -> { robot, channel, last, timer } (robot status: battery, on the dock or not)
     this.views = new Map(); // duid -> MapView (the picture of the map camera)
@@ -109,6 +112,7 @@ class RoborockRoomCleanPlatform {
       for (const vacuum of this.vacuums.values()) vacuum.close();
       for (const view of this.views.values()) view.close();
       for (const lock of this.childLocks.values()) clearTimeout(lock.timer);
+      for (const timer of this.roomTimers.values()) clearInterval(timer);
       if (this.painter) this.painter.close(true);
       if (this.session) this.session.stop();
     });
@@ -404,6 +408,8 @@ class RoborockRoomCleanPlatform {
       },
       // The rooms of the fan or switch that is on now: a list, null for the whole home (or when
       // they cannot be told), undefined when none is on.
+      // The room the robot is in, from the map (when its status does not say).
+      roomNow: () => this.roomNow(robot.duid),
       runningRooms: () => {
         const program = programs().find((p) => p.running);
         if (!program) return undefined;
@@ -414,6 +420,7 @@ class RoborockRoomCleanPlatform {
       },
     });
     this.vacuums.set(robot.duid, vacuum);
+    this.followRoom(robot, channel, vacuum);
     vacuum.start();
     return vacuum;
   }
@@ -463,7 +470,11 @@ class RoborockRoomCleanPlatform {
     }
     const kept = view.load();
     this.views.set(robot.duid, view);
-    channel.onMap = (map) => view.offer(map);
+    const before = channel.onMap;
+    channel.onMap = (map) => {
+      view.offer(map);
+      if (before) before(map);
+    };
     const camera = new PictureCamera({
       api: this.api,
       log: this.log,
@@ -1107,6 +1118,44 @@ class RoborockRoomCleanPlatform {
     if (this.stopped) return;
     lock.timer = setTimeout(() => this.readChildLock(lock), this.childLockEveryMs || 10 * 60 * 1000);
     lock.timer.unref?.();
+  }
+
+  /**
+   * The room the robot is in, for the vacuum in Apple Home: read from where the map puts the
+   * robot (S8 and others do not name the room in their status). Every map that arrives is
+   * used; while the robot cleans one is asked for every 20 seconds.
+   */
+  followRoom(robot, channel, vacuum) {
+    const duid = robot.duid;
+    const before = channel.onMap;
+    channel.onMap = (map) => {
+      if (before) before(map);
+      const room = roomAt(map);
+      const last = this.roomsNow.get(duid);
+      this.roomsNow.set(duid, { room, at: Date.now() });
+      if (room != null && (!last || last.room !== room)) {
+        this.log.debug(`${robot.name}: in room ${room} now.`);
+        vacuum.statusChanged();
+      }
+    };
+    let attempt = 0;
+    const timer = setInterval(() => {
+      if (this.stopped) return;
+      const monitor = this.monitors.get(duid);
+      const status = monitor && (monitor.last || monitor.full);
+      if (!status || !CLEANING_STATES.has(status.state)) return;
+      const last = this.roomsNow.get(duid);
+      if (last && Date.now() - last.at < 18000) return;
+      channel.getMap(10000, ++attempt).catch((err) => this.log.debug(`${robot.name}: no map for the room (${err.message}).`));
+    }, this.roomEveryMs || 20000);
+    timer.unref?.();
+    this.roomTimers.set(duid, timer);
+  }
+
+  /** The room the robot was in on a recent map (null when not known). */
+  roomNow(duid) {
+    const last = this.roomsNow.get(duid);
+    return last && last.room != null && Date.now() - last.at < 90000 ? last.room : null;
   }
 
   /** Whether the robot is in the situation a state sensor of that kind is open for. */

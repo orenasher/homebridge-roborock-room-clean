@@ -295,3 +295,28 @@ test("commands that cannot be done: said in the log, Home is put right again", a
   assert.deepEqual(t.sent("find_me"), [["find_me", []]]);
   t.stop();
 });
+
+test("a robot that does not name its room (S8): Home's line follows the robot on the map", async () => {
+  const { demoMap } = require("../lib/demo-map");
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  const v = await t.published();
+  // The whole home, started in the Roborock app (or a routine): no room is known at first.
+  robot.map = demoMap(); // no room marked yet: the whole home
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, fan_power: 102, water_box_mode: 200 });
+  await wait(1500);
+  assert.equal(v.clusters.serviceArea.currentArea, 16, "the robot starts in the living room");
+  robot.map = demoMap({ cleaning: [17] }); // now it stands in the kitchen
+  const channel = t.platform.monitors.get(DUID).channel;
+  channel.stash = null;
+  await channel.getMap(3000, 1);
+  await wait(1200);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 1 }, 17], t.said().join("\n"));
+  // Back to the living room.
+  robot.map = demoMap({ cleaning: [16] });
+  channel.stash = null;
+  await channel.getMap(3000, 2);
+  await wait(1200);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 1, 17: 3 }, 16]);
+  t.stop();
+});

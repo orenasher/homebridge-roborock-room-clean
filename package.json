@@ -1,7 +1,7 @@
 {
   "name": "homebridge-roborock-room-clean",
   "displayName": "Roborock Room Clean",
-  "version": "1.13.1",
+  "version": "1.13.2",
   "description": "A fan in Apple Home for every room on your Roborock map: turn it on to clean the room, the fan speed sets the suction power. Vacuum-only and number of passes configurable, with no 10-routine limit. Your Roborock app routines can be added as switches too, and show when they are started from the Roborock app. Optional: the robot itself with the vacuum icon (Matter), and a map camera with the robot's live map in a colour style you choose. Settings in English or Hebrew.",
   "main": "index.js",
   "license": "MIT",
@@ -21,8 +21,8 @@
     "homekit"
   ],
   "engines": {
-    "homebridge": "^1.6.0 || ^2.0.0-beta.0",
-    "node": ">=18.0.0"
+    "homebridge": "^1.6.0 || ^2.0.0",
+    "node": "^18.20.4 || ^20.15.1 || ^22 || ^24"
   },
   "scripts": {
     "test": "node --test test/*.test.js"
@@ -36,7 +36,8 @@
     "homebridge-ui/",
     "config.schema.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",

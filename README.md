@@ -1,4 +1,8 @@
+<p align="center"><img src="https://raw.githubusercontent.com/orenasher/homebridge-roborock-room-clean/main/branding/icon.png" alt="Roborock Room Clean" width="160"></p>
+
 # Roborock Room Clean
+
+[![npm](https://img.shields.io/npm/v/homebridge-roborock-room-clean)](https://www.npmjs.com/package/homebridge-roborock-room-clean) [![downloads](https://img.shields.io/npm/dt/homebridge-roborock-room-clean)](https://www.npmjs.com/package/homebridge-roborock-room-clean)
 
 A Homebridge plugin that adds a **fan in Apple Home for every room on your Roborock map**.
 

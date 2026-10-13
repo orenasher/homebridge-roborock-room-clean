@@ -1293,6 +1293,11 @@
       return p;
     }
 
+    // Required fields are listed at the object level of the schema ("required": [...]).
+    function isRequired(key, prop) {
+      const list = schema && schema.schema && Array.isArray(schema.schema.required) ? schema.schema.required : [];
+      return prop.required === true || list.includes(key);
+    }
     function fieldNode(key, prop, block) {
       const id = "rr-f-" + key;
       const title = fieldText(key, 0, prop.title || key);
@@ -1362,7 +1367,7 @@
         const read = () => {
           const text = input.value.trim();
           if (list) return text.split(",").map((s) => s.trim()).filter(Boolean);
-          if (!text) return prop.required ? (block[key] == null ? prop.default : block[key]) : undefined;
+          if (!text) return isRequired(key, prop) ? (block[key] == null ? prop.default : block[key]) : undefined;
           if (!numeric) return text;
           let n = Math.round(Number(text));
           if (!Number.isFinite(n)) return undefined;

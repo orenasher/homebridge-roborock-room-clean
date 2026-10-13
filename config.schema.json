@@ -10,8 +10,7 @@
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "Roborock Room Clean",
-        "required": true
+        "default": "Roborock Room Clean"
       },
       "language": {
         "title": "Language / שפה",
@@ -157,8 +156,7 @@
           "properties": {
             "name": {
               "title": "Fan name",
-              "type": "string",
-              "required": true
+              "type": "string"
             },
             "rooms": {
               "title": "Rooms (names as in the Roborock app; leave empty for every room)",
@@ -232,7 +230,10 @@
               "title": "Robot (only if you have more than one)",
               "type": "string"
             }
-          }
+          },
+          "required": [
+            "name"
+          ]
         }
       },
       "routines": {
@@ -547,7 +548,10 @@
         "minimum": 30,
         "description": "How often the robot is asked for its status while it sits on the dock. Away from the dock it is asked every 30 seconds, and changes the robot reports itself (leaving the dock, battery level) show up right away."
       }
-    }
+    },
+    "required": [
+      "name"
+    ]
   },
   "layout": [
     "name",

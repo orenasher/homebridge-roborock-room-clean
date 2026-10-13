@@ -2,6 +2,10 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.13.5
+
+- settings schema: required fields listed the JSON Schema way; keywords declare HAP and Matter support; ffmpeg from ffmpeg-for-homebridge found without loading that package
+
 ## 1.13.4
 
 - donation link (PayPal)

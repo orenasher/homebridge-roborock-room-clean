@@ -340,3 +340,59 @@ test("a robot that does not name its room (S8): Home's line follows the robot on
   assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 1 }, 17]);
   t.stop();
 });
+
+test("a clean that goes to charge in the middle: the rooms done stay done, and it goes on from there", async () => {
+  const { demoMap } = require("../lib/demo-map");
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  t.platform.roomDwellMs = 0;
+  const v = await t.published();
+  const channel = t.platform.monitors.get(DUID).channel;
+  const at = async (room) => {
+    robot.map = demoMap({ cleaning: [room] });
+    channel.stash = null;
+    await channel.getMap(3000, Math.floor(Math.random() * 1000) + 10);
+    await wait(900);
+  };
+  robot.map = demoMap();
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 60 });
+  await wait(1500);
+  await at(17);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 1 }, 17]);
+  // Battery low: back to the dock to charge, the clean is not over (in_cleaning stays).
+  await t.report({ ...DOCKED, state: 15, in_cleaning: 1, clean_time: 900, battery: 12 });
+  await t.report({ ...DOCKED, state: 8, in_cleaning: 1, clean_time: 900, battery: 15 });
+  await wait(900);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 0 }, null], "done stays done, the kitchen waits");
+  // Charged: it goes on in the kitchen.
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 905, battery: 80 });
+  await at(17);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 1 }, 17]);
+  // Over: on the dock with the clean finished.
+  await t.report({ ...DOCKED, state: 8, in_cleaning: 0, clean_time: 1500, battery: 60 });
+  await wait(900);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 3 }, null]);
+  t.stop();
+});
+
+test("going on after charging with only some rooms left: the others are shown done", async () => {
+  const { demoMap } = require("../lib/demo-map");
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  t.platform.roomDwellMs = 0;
+  const v = await t.published();
+  robot.map = demoMap();
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 60 });
+  await wait(1500);
+  await t.report({ ...DOCKED, state: 8, in_cleaning: 1, clean_time: 900, battery: 15 });
+  await wait(900);
+  // Charged: the robot goes on with the kitchen only (the room left), and the fan of the kitchen is on.
+  t.platform.vacuums.get(DUID).host.runningRooms = () => [17];
+  robot.map = demoMap({ cleaning: [17] });
+  await t.report({ ...DOCKED, state: 18, in_cleaning: 3, clean_time: 905, battery: 80 });
+  await wait(1200);
+  assert.deepEqual(t.rooms()[16], 3, "the living room was done before the charge: " + JSON.stringify(t.rooms()));
+  assert.notEqual(t.rooms()[17], 3, "the kitchen is what is left");
+  t.stop();
+});
+

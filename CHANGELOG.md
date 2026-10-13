@@ -2,6 +2,10 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.13.3
+
+- the vacuum's rooms survive a stop on the dock to charge in the middle of a clean: rooms done stay done, and the clean goes on from there
+
 ## 1.13.2
 
 - plugin icon, changelog, supported Node.js versions listed

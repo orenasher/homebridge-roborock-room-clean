@@ -931,6 +931,8 @@ class RoborockRoomCleanPlatform {
     }
     this.updateChargingSensor(duid, status);
     this.updateStateSensors(duid, status);
+    // Not cleaning (on the dock, on the way, stopped): where the robot was is no longer where it cleans.
+    if (typeof status.state === "number" && !CLEANING_STATES.has(status.state)) this.roomsNow.delete(duid);
     for (const program of this.programs.values()) {
       if (program.robot.duid === duid) this.applyFanBattery(program);
     }

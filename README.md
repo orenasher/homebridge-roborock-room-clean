@@ -2,7 +2,7 @@
 
 # Roborock Room Clean
 
-[![npm](https://img.shields.io/npm/v/homebridge-roborock-room-clean)](https://www.npmjs.com/package/homebridge-roborock-room-clean) [![downloads](https://img.shields.io/npm/dt/homebridge-roborock-room-clean)](https://www.npmjs.com/package/homebridge-roborock-room-clean)
+[![npm](https://img.shields.io/npm/v/homebridge-roborock-room-clean)](https://www.npmjs.com/package/homebridge-roborock-room-clean) [![downloads](https://img.shields.io/npm/dt/homebridge-roborock-room-clean)](https://www.npmjs.com/package/homebridge-roborock-room-clean) [![Donate](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/orenasher)
 
 A Homebridge plugin that adds a **fan in Apple Home for every room on your Roborock map**.
 
@@ -243,3 +243,7 @@ Protocol details based on [python-roborock](https://github.com/Python-roborock/p
 כדי לעבור לעברית: פתח את הגדרות התוסף ב-Homebridge ובחר **עברית** בתיבה **Language / שפה** שבראש העמוד, לחץ על שמירה והפעל מחדש את Homebridge.
 
 </div>
+
+## Support
+
+If this plugin saves you time, you can buy me a coffee: [paypal.me/orenasher](https://paypal.me/orenasher). Thank you!

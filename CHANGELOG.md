@@ -2,6 +2,10 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.13.6
+
+- the vacuum's battery percentage in Apple Home is refreshed every 5 percent (at most every 10 minutes), not only after a restart
+
 ## 1.13.5
 
 - settings schema: required fields listed the JSON Schema way; keywords declare HAP and Matter support; ffmpeg from ffmpeg-for-homebridge found without loading that package

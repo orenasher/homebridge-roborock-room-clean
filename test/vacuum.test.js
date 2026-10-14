@@ -63,6 +63,16 @@ test("the vacuum Home is told about: rooms, kinds of clean, battery, state", asy
   // percentage it read when the vacuum was added until it finds the battery changed.
   const battery = t.home.updates.filter((u) => u.cluster === "powerSource").map((u) => u.attributes.batPercentRemaining);
   assert.deepEqual(battery.slice(0, 2), [null, 174]);
+  // Later on, every 5 percent (at most every 10 minutes) the same nudge, the percentage only.
+  const vac = t.platform.vacuums.get(DUID);
+  vac.host.nudgeGapMs = 0;
+  const before = t.home.updates.length;
+  await t.report({ ...DOCKED, battery: 85 });
+  await t.report({ ...DOCKED, battery: 80 });
+  const later = t.home.updates.slice(before).filter((u) => u.cluster === "powerSource").map((u) => u.attributes.batPercentRemaining).filter((x) => x !== undefined);
+  assert.deepEqual(later, [170, null, 160], "85%: told as is; 80% (5 down from the last nudge at 87%): nudged");
+  vac.host.nudgeGapMs = undefined;
+  await t.report({ ...DOCKED, battery: 87 });
   assert.equal(v.clusters.powerSource.batChargeState, 1);
   assert.ok(t.said().some((l) => /published as a robot vacuum for Apple Home/.test(l) && /Manual Code/.test(l)));
   // The same robot is always the same accessory.

@@ -46,6 +46,7 @@ async function startPlatform(config, robot, { matter = true, routines = [], keep
   // What Homebridge holds is compared with what it was told only in the tests that ask for it
   // (checkMs): elsewhere it would put right, unseen, what a test is there to catch.
   platform.vacuumCheckMs = checkMs || 3600000;
+  platform.vacuumNudgeHoldMs = 50; // the battery shown as unknown for a moment (12 s for real)
   await platform.start();
   const monitor = platform.monitors.get(DUID);
   // The robot's status as the plugin reads it at its next check.

@@ -363,6 +363,7 @@ class RoborockRoomCleanPlatform {
       restore: this.config.restoreSettings !== false,
       store: { read: () => this.readJson(file), write: (data) => this.writeJson(file, data) },
       checkMs: this.vacuumCheckMs, // tests only
+      nudgeHoldMs: this.vacuumNudgeHoldMs, // tests only
       status: () => {
         const monitor = this.monitors.get(robot.duid);
         if (!monitor || (!monitor.full && !monitor.last)) return null;

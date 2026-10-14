@@ -61,7 +61,8 @@ test("the vacuum Home is told about: rooms, kinds of clean, battery, state", asy
   assert.equal(v.clusters.powerSource.batPercentRemaining, 174, "87%, in Matter's half percents");
   // Once after the start the battery is shown as unknown for a moment, then as it is: Home keeps the
   // percentage it read when the vacuum was added until it finds the battery changed.
-  const battery = t.home.updates.filter((u) => u.cluster === "powerSource").map((u) => u.attributes.batPercentRemaining);
+  await wait(400); // the percentage stays unknown for a moment
+  const battery = t.home.updates.filter((u) => u.cluster === "powerSource").map((u) => u.attributes.batPercentRemaining).filter((x) => x !== undefined);
   assert.deepEqual(battery.slice(0, 2), [null, 174]);
   // Later on, every 5 percent (at most every 10 minutes) the same nudge, the percentage only.
   const vac = t.platform.vacuums.get(DUID);
@@ -69,6 +70,7 @@ test("the vacuum Home is told about: rooms, kinds of clean, battery, state", asy
   const before = t.home.updates.length;
   await t.report({ ...DOCKED, battery: 85 });
   await t.report({ ...DOCKED, battery: 80 });
+  await wait(400);
   const later = t.home.updates.slice(before).filter((u) => u.cluster === "powerSource").map((u) => u.attributes.batPercentRemaining).filter((x) => x !== undefined);
   assert.deepEqual(later, [170, null, 160], "85%: told as is; 80% (5 down from the last nudge at 87%): nudged");
   vac.host.nudgeGapMs = undefined;

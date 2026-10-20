@@ -2,6 +2,11 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.13.9
+
+- the rooms done in a clean in progress are kept on disk: after a restart of Homebridge (an update, a crash) in the middle of a clean, they are shown done again in Apple Home when the robot is still in the same clean
+- going on after being sent home is recognised only from the robot's own way home with its clean time known, so "send to dock" from Home and a new clean started on the way home stay as before
+
 ## 1.13.8
 
 - a clean sent home in the middle (the home button on the robot, the Roborock app) and told to go on before it reached the dock keeps its progress: the rooms already done stay done in Apple Home, instead of starting over as a new clean

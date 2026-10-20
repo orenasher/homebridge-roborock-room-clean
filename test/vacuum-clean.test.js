@@ -449,3 +449,40 @@ test("a new clean started from the way home is still a new clean", async () => {
   assert.notEqual(t.rooms()[16], 3, "a new clean: nothing done yet: " + JSON.stringify(t.rooms()));
   t.stop();
 });
+
+test("Homebridge restarted in the middle of a clean: the rooms done before stay done", async () => {
+  const { demoMap } = require("../lib/demo-map");
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  t.platform.roomDwellMs = 0;
+  await t.published();
+  robot.map = demoMap();
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 60 });
+  await wait(1500);
+  const channel = t.platform.monitors.get(DUID).channel;
+  robot.map = demoMap({ cleaning: [17] });
+  channel.stash = null;
+  await channel.getMap(3000, 41);
+  await wait(900);
+  assert.deepEqual(t.rooms(), { 16: 3, 17: 1 });
+  t.stop();
+  // Back up again, the robot still in the same clean (its time has gone on).
+  const busy = { ...DOCKED, state: 5, in_cleaning: 1, clean_time: 400 };
+  const again = await startPlatform({ matterVacuum: true }, { status: busy, map: demoMap() }, { keepDir: t.dir });
+  again.platform.roomDwellMs = 0;
+  await again.published();
+  await again.report(busy);
+  await wait(1500);
+  // The map now shows it back in the living room; the kitchen, where it was before the restart, stays counted.
+  assert.deepEqual(again.rooms(), { 16: 1, 17: 3 }, "what was done before the restart is kept");
+  assert.ok(again.said().some((l) => /went on with the clean in progress from before the restart \(1 of 2/.test(l)), again.said().join("\n"));
+  again.stop();
+  // A clean started since (its time from zero): nothing is taken up.
+  const fresh = { ...DOCKED, state: 5, in_cleaning: 1, clean_time: 5 };
+  const third = await startPlatform({ matterVacuum: true }, { status: fresh, map: demoMap() }, { keepDir: t.dir });
+  await third.published();
+  await third.report(fresh);
+  await wait(1200);
+  assert.ok(!third.said().some((l) => /from before the restart/.test(l)));
+  third.stop();
+});

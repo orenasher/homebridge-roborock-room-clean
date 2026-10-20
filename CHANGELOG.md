@@ -2,6 +2,10 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.13.8
+
+- a clean sent home in the middle (the home button on the robot, the Roborock app) and told to go on before it reached the dock keeps its progress: the rooms already done stay done in Apple Home, instead of starting over as a new clean
+
 ## 1.13.7
 
 - the vacuum's battery refresh keeps the percentage unknown for 12 seconds before the real value, so Matter reports both steps to Apple Home; each refresh is written in the log

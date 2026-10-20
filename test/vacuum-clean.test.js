@@ -396,3 +396,56 @@ test("going on after charging with only some rooms left: the others are shown do
   t.stop();
 });
 
+test("sent home in the middle and told to go on before it got there: the rooms done stay done", async () => {
+  const { demoMap } = require("../lib/demo-map");
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  t.platform.roomDwellMs = 0;
+  const v = await t.published();
+  const channel = t.platform.monitors.get(DUID).channel;
+  const at = async (room) => {
+    robot.map = demoMap({ cleaning: [room] });
+    channel.stash = null;
+    await channel.getMap(3000, Math.floor(Math.random() * 1000) + 10);
+    await wait(900);
+  };
+  robot.map = demoMap();
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 60 });
+  await wait(1500);
+  await at(17);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 1 }, 17]);
+  // The home button on the robot: it drives home, the clean is not over.
+  await t.report({ ...DOCKED, state: 6, in_cleaning: 1, clean_time: 700 });
+  await wait(600);
+  // "Continue" in the Roborock app, still on the way.
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 705 });
+  await wait(600);
+  assert.equal(t.rooms()[16], 3, "the living room stays done: " + JSON.stringify(t.rooms()));
+  await at(17);
+  assert.deepEqual([t.rooms(), v.clusters.serviceArea.currentArea], [{ 16: 3, 17: 1 }, 17]);
+  t.stop();
+});
+
+test("a new clean started from the way home is still a new clean", async () => {
+  const { demoMap } = require("../lib/demo-map");
+  const robot = { status: DOCKED };
+  const t = await startPlatform({ matterVacuum: true }, robot);
+  t.platform.roomDwellMs = 0;
+  const v = await t.published();
+  const channel = t.platform.monitors.get(DUID).channel;
+  robot.map = demoMap();
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 60 });
+  await wait(1500);
+  robot.map = demoMap({ cleaning: [17] });
+  channel.stash = null;
+  await channel.getMap(3000, 77);
+  await wait(900);
+  await t.report({ ...DOCKED, state: 6, in_cleaning: 1, clean_time: 900 });
+  await wait(600);
+  // Another clean, its time from zero.
+  robot.map = demoMap();
+  await t.report({ ...DOCKED, state: 5, in_cleaning: 1, clean_time: 5 });
+  await wait(1200);
+  assert.notEqual(t.rooms()[16], 3, "a new clean: nothing done yet: " + JSON.stringify(t.rooms()));
+  t.stop();
+});

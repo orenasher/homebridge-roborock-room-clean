@@ -252,7 +252,17 @@ function addFakeMatter(api) {
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const matter = {
     uuid: api.hap.uuid,
-    deviceTypes: { RoboticVacuumCleaner: { name: "RoboticVacuumCleaner", deviceType: 0x74 } },
+    deviceTypes: {
+      RoboticVacuumCleaner: {
+        name: "RoboticVacuumCleaner",
+        deviceType: 0x74,
+        // matter.js: a device type with more servers on it
+        with(...servers) {
+          return { name: "RoboticVacuumCleaner", deviceType: 0x74, base: matter.deviceTypes.RoboticVacuumCleaner, servers };
+        },
+      },
+    },
+    deviceRequirements: { Thermostat: { ThermostatUserInterfaceConfigurationServer: class ThermostatUserInterfaceConfigurationServer {} } },
     accessories: new Map(), // what Homebridge holds: accessory.clusters is the state Home sees
     updates: [], // [{ cluster, attributes }] in the order they were taken
     lines: [], // Homebridge's own log
@@ -266,7 +276,7 @@ function addFakeMatter(api) {
       if (!matter.ready) throw new Error(`${plugin}: Cannot register Matter accessories: Matter is not enabled on this bridge.`);
       for (const a of list) {
         for (const field of ["UUID", "displayName", "deviceType", "manufacturer", "model", "serialNumber"]) assert.ok(a[field], `the accessory has '${field}'`);
-        assert.equal(a.deviceType, matter.deviceTypes.RoboticVacuumCleaner);
+        assert.equal(a.deviceType.base || a.deviceType, matter.deviceTypes.RoboticVacuumCleaner);
         for (const cluster of Object.keys(a.handlers)) for (const fn of Object.values(a.handlers[cluster])) assert.equal(typeof fn, "function");
         JSON.stringify(a.clusters); // plain data: it is kept in Homebridge's cache
         // No error in what Home takes the vacuum from (it upsets Apple Home there): Matter's default stands in.

@@ -2,6 +2,11 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.14.0
+
+- experimental: `vacuumChildLock` puts the robot's child lock on the robot vacuum in Apple Home (Locked / Unlocked), kept in step with the child lock switch; off by default
+- the child lock is read once per robot and shared by the switch and the vacuum
+
 ## 1.13.9
 
 - the rooms done in a clean in progress are kept on disk: after a restart of Homebridge (an update, a crash) in the middle of a clean, they are shown done again in Apple Home when the robot is still in the same clean

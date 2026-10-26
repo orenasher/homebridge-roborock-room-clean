@@ -541,6 +541,12 @@
         "placeholder": "S8 Child Lock",
         "description": "Default: the robot's name + \"Child Lock\", e.g. \"S8 Child Lock\". You can write e.g. \"נעילת מקשים שואב\"."
       },
+      "vacuumChildLock": {
+        "title": "Child lock on the robot vacuum (experimental)",
+        "type": "boolean",
+        "default": false,
+        "description": "Shows the child lock on the robot vacuum in Apple Home (Locked / Unlocked), kept in step with the child lock switch. Experimental: Matter has no child lock for vacuums, so the vacuum also gets the keypad lockout that Apple Home shows as a child lock. Needs the robot vacuum turned on. After turning this on or off, Apple Home may take a while to show the change."
+      },
       "statusInterval": {
         "title": "Check the robot's status every (seconds)",
         "type": "integer",
@@ -595,6 +601,7 @@
         "stoppedSensorName",
         "childLockSwitch",
         "childLockSwitchName",
+        "vacuumChildLock",
         "statusInterval"
       ]
     },

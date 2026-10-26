@@ -343,8 +343,11 @@ class RoborockRoomCleanPlatform {
       }
       return restore;
     };
+    // The child lock on the vacuum itself (experimental): kept in step with the child lock switch.
+    const lock = this.config.vacuumChildLock === true ? this.childLockOf(robot, channel) : null;
     const vacuum = new MatterVacuum({
       log: this.log,
+      childLock: lock ? { get: () => lock.on, set: (want) => this.setChildLock(lock, want) } : null,
       matter,
       pluginName: PLUGIN_NAME,
       platformName: PLATFORM_NAME,
@@ -421,6 +424,7 @@ class RoborockRoomCleanPlatform {
       },
     });
     this.vacuums.set(robot.duid, vacuum);
+    if (lock) lock.views.push((value) => vacuum.showChildLock(value));
     this.followRoom(robot, channel, vacuum);
     vacuum.start();
     return vacuum;
@@ -1075,32 +1079,61 @@ class RoborockRoomCleanPlatform {
       if (!service.testCharacteristic(Characteristic.ConfiguredName)) service.addOptionalCharacteristic(Characteristic.ConfiguredName);
       service.setCharacteristic(Characteristic.ConfiguredName, name);
     }
-    const lock = { robot, channel, accessory, service, on: accessory.context.locked === true, timer: null, said: false };
-    this.childLocks.set(robot.duid, lock);
+    const lock = this.childLockOf(robot, channel, accessory.context.locked === true);
+    lock.name = name;
+    lock.accessory = accessory;
+    lock.service = service;
     const on = service.getCharacteristic(Characteristic.On);
+    lock.views.push((value) => {
+      accessory.context.locked = value;
+      service.updateCharacteristic(Characteristic.On, value);
+    });
     on.onGet(() => lock.on);
     on.onSet(async (value) => {
-      const want = !!value;
-      try {
-        await channel.send("set_child_lock_status", { lock_status: want ? 1 : 0 });
-        this.showChildLock(lock, want);
-        this.log.info(`${name}: ${want ? "on (the buttons on the robot are locked)" : "off"}.`);
-      } catch (err) {
-        this.log.warn(`${name}: could not ${want ? "lock" : "unlock"} the buttons (${err.message}).`);
-        setTimeout(() => on.updateValue(lock.on), 300);
-        return;
-      }
-      setTimeout(() => this.readChildLock(lock), 3000).unref?.();
+      if (!(await this.setChildLock(lock, !!value))) setTimeout(() => on.updateValue(lock.on), 300);
     });
     on.updateValue(lock.on);
-    this.readChildLock(lock);
     return uuid;
+  }
+
+  /**
+   * The robot's child lock (the buttons on the robot do nothing while it is
+   * on), shown on the child lock switch and/or on the robot vacuum in Apple
+   * Home. What the robot says is read at the start, every 10 minutes (a change
+   * made in the Roborock app shows up then) and after each change.
+   */
+  childLockOf(robot, channel, locked = false) {
+    let lock = this.childLocks.get(robot.duid);
+    if (lock) return lock;
+    lock = { robot, channel, name: this.text.childLock(robot.name), on: locked, timer: null, said: false, views: [], accessory: null, service: null };
+    this.childLocks.set(robot.duid, lock);
+    setImmediate(() => this.readChildLock(lock)); // once everything that shows it is in place
+    return lock;
+  }
+
+  /** Lock or unlock the buttons on the robot. True when the robot took it. */
+  async setChildLock(lock, want) {
+    try {
+      await lock.channel.send("set_child_lock_status", { lock_status: want ? 1 : 0 });
+    } catch (err) {
+      this.log.warn(`${lock.name}: could not ${want ? "lock" : "unlock"} the buttons (${err.message}).`);
+      return false;
+    }
+    this.showChildLock(lock, want);
+    this.log.info(`${lock.name}: ${want ? "on (the buttons on the robot are locked)" : "off"}.`);
+    setTimeout(() => this.readChildLock(lock), 3000).unref?.();
+    return true;
   }
 
   showChildLock(lock, value) {
     lock.on = value;
-    lock.accessory.context.locked = value;
-    lock.service.updateCharacteristic(this.api.hap.Characteristic.On, value);
+    for (const view of lock.views) {
+      try {
+        view(value);
+      } catch (err) {
+        this.log.debug(`${lock.name}: could not show the child lock (${err.message}).`);
+      }
+    }
   }
 
   async readChildLock(lock) {
@@ -1113,10 +1146,10 @@ class RoborockRoomCleanPlatform {
       if (status === 0 || status === 1) this.showChildLock(lock, status === 1);
       else if (!lock.said) {
         lock.said = true;
-        this.log.warn(`${lock.accessory.context.name}: the robot gave no child lock status (${JSON.stringify(answer)}); it may not have a child lock.`);
+        this.log.warn(`${lock.name}: the robot gave no child lock status (${JSON.stringify(answer)}); it may not have a child lock.`);
       }
     } catch (err) {
-      this.log.debug(`${lock.accessory.context.name}: child lock status not read (${err.message}).`);
+      this.log.debug(`${lock.name}: child lock status not read (${err.message}).`);
     }
     if (this.stopped) return;
     lock.timer = setTimeout(() => this.readChildLock(lock), this.childLockEveryMs || 10 * 60 * 1000);

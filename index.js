@@ -343,11 +343,8 @@ class RoborockRoomCleanPlatform {
       }
       return restore;
     };
-    // The child lock on the vacuum itself (experimental): kept in step with the child lock switch.
-    const lock = this.config.vacuumChildLock === true ? this.childLockOf(robot, channel) : null;
     const vacuum = new MatterVacuum({
       log: this.log,
-      childLock: lock ? { get: () => lock.on, set: (want) => this.setChildLock(lock, want) } : null,
       matter,
       pluginName: PLUGIN_NAME,
       platformName: PLATFORM_NAME,
@@ -424,7 +421,6 @@ class RoborockRoomCleanPlatform {
       },
     });
     this.vacuums.set(robot.duid, vacuum);
-    if (lock) lock.views.push((value) => vacuum.showChildLock(value));
     this.followRoom(robot, channel, vacuum);
     vacuum.start();
     return vacuum;

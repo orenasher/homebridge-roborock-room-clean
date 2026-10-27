@@ -45,8 +45,6 @@ A clean from start to end: cleaning opens; at the end cleaning closes and return
 
 **Child lock.** `childLockSwitch: true` adds a switch for the robot's child lock: on locks the buttons on the robot, off unlocks them. A change made in the Roborock app shows up within 10 minutes. Rename it with `childLockSwitchName`.
 
-**Child lock on the robot vacuum (experimental).** `vacuumChildLock: true` (with the robot vacuum turned on) also puts the child lock on the robot vacuum in Apple Home, as Locked / Unlocked, kept in step with the child lock switch. Matter has no child lock for robot vacuums; the vacuum also gets the keypad lockout of Matter's thermostat user interface cluster, which Apple Home shows as a child lock (some vacuums with their own Matter do the same). If it causes trouble, turn it off again. After turning it on or off, Apple Home may take a while to show the change (restarting the home hub helps).
-
 ## Supported robots
 
 Roborock robots that use the standard "1.0" protocol: S-series (S5 – S8 family), Q-series, Q Revo, Saros and similar. The 2025 Q7 series (B01 protocol) is not supported yet.

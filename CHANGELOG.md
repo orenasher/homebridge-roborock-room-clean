@@ -2,6 +2,10 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.14.1
+
+- the experimental child lock on the robot vacuum is removed again: Apple Home showed the keypad lockout's cluster as a temperature unit ("physical display"), not as a child lock; the child lock switch stays as it was
+
 ## 1.14.0
 
 - experimental: `vacuumChildLock` puts the robot's child lock on the robot vacuum in Apple Home (Locked / Unlocked), kept in step with the child lock switch; off by default

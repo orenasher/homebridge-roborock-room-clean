@@ -296,3 +296,73 @@ test("the kinds of clean keep their numbers", () => {
   assert.deepEqual(CLEAN_MODES.map((m) => [m.mode, m.fan, m.mop]), [[0, null, false], [1, 105, true], [2, null, true], [3, 101, false], [4, 102, false], [5, 103, false], [6, 104, false], [7, 108, false]]);
 });
 
+
+test("child lock on the robot vacuum: off by default; put on the vacuum's node, changed from Home, in step with the switch", async () => {
+  const { LOCK_HOOKS } = require("../lib/vacuum");
+  const plain = await startPlatform({ matterVacuum: true }, { status: DOCKED, childLock: true });
+  const a = await plain.published();
+  assert.ok(!a.deviceType.servers, "nothing added unless asked for");
+  plain.stop();
+
+  const robot = { status: DOCKED, childLock: true };
+  const t = await startPlatform({ matterVacuum: true, vacuumChildLock: true, childLockSwitch: true }, robot);
+  const v = await t.published();
+  assert.equal(v.deviceType.servers.length, 1, "the vacuum carries the link to its node");
+  assert.equal(v.deviceType.servers[0].id, "roborockChildLock");
+  // The vacuum's Matter node, as matter.js has it (the attribute listed: second start of the bridge).
+  const listeners = [];
+  const node = {
+    state: { basicInformation: { attributeList: [0, 1, 16], localConfigDisabled: false } },
+    events: { basicInformation: { localConfigDisabled$Changed: { on: (fn) => listeners.push(fn) } } },
+    async set(values) {
+      const value = values.basicInformation.localConfigDisabled;
+      if (value === node.state.basicInformation.localConfigDisabled) return;
+      node.state.basicInformation.localConfigDisabled = value;
+      for (const fn of listeners) fn(value);
+    },
+  };
+  const lock = t.platform.childLocks.get(DUID);
+  for (let n = 0; n < 40 && !lock.on; n++) await wait(100);
+  LOCK_HOOKS.get(t.platform.vacuums.get(DUID).uuid).attach({ id: "x", owner: node });
+  await wait(100);
+  assert.equal(node.state.basicInformation.localConfigDisabled, true, "locked in the Roborock app: shown locked");
+  assert.ok(t.said().some((l) => /the child lock is on the robot vacuum in Apple Home/.test(l)), t.said().join("\n"));
+  // Unlocked from the vacuum in Home.
+  await node.set({ basicInformation: { localConfigDisabled: false } });
+  for (let n = 0; n < 30 && robot.childLock; n++) await wait(100);
+  assert.equal(robot.childLock, false, "the robot was unlocked");
+  const on = lock.service.getCharacteristic(t.api.hap.Characteristic.On);
+  assert.equal(on.value, false, "the switch shows it too");
+  // Locked with the switch: the vacuum shows it.
+  await on.setFn(true);
+  assert.equal(robot.childLock, true);
+  await wait(100);
+  assert.equal(node.state.basicInformation.localConfigDisabled, true);
+  // The robot does not take it: Home is put right again.
+  const send = lock.channel.send.bind(lock.channel);
+  lock.channel.send = (method, ...rest) => (method === "set_child_lock_status" ? Promise.reject(new Error("offline")) : send(method, ...rest));
+  await node.set({ basicInformation: { localConfigDisabled: false } });
+  for (let n = 0; n < 30 && node.state.basicInformation.localConfigDisabled !== true; n++) await wait(100);
+  assert.equal(node.state.basicInformation.localConfigDisabled, true, "back to locked");
+  assert.equal(robot.childLock, true);
+  t.stop();
+});
+
+test("child lock on the robot vacuum: the first start prepares it and says it shows after the next restart", async () => {
+  const { LOCK_HOOKS } = require("../lib/vacuum");
+  const t = await startPlatform({ matterVacuum: true, vacuumChildLock: true }, { status: DOCKED, childLock: false });
+  await t.published();
+  const writes = [];
+  const node = {
+    state: { basicInformation: { attributeList: [0, 1] } },
+    events: { basicInformation: { localConfigDisabled$Changed: { on() {} } } },
+    async set(values) {
+      writes.push(values);
+    },
+  };
+  LOCK_HOOKS.get(t.platform.vacuums.get(DUID).uuid).attach({ id: "x", owner: node });
+  await wait(100);
+  assert.deepEqual(writes, [{ basicInformation: { localConfigDisabled: false } }], "a value is given, so Matter keeps it for the next start");
+  assert.ok(t.said().some((l) => /shows in Apple Home after the next restart/.test(l)), t.said().join("\n"));
+  t.stop();
+});

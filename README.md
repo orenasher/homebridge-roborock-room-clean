@@ -45,6 +45,8 @@ A clean from start to end: cleaning opens; at the end cleaning closes and return
 
 **Child lock.** `childLockSwitch: true` adds a switch for the robot's child lock: on locks the buttons on the robot, off unlocks them. A change made in the Roborock app shows up within 10 minutes. Rename it with `childLockSwitchName`.
 
+**Child lock on the robot vacuum.** `vacuumChildLock: true` (with the robot vacuum turned on) also shows the child lock on the robot vacuum in Apple Home, as Locked / Unlocked, kept in step with the child lock switch and the Roborock app. Apple Home shows it from the "local config disabled" attribute of the vacuum's Matter node, which Homebridge does not offer; the plugin adds it. Matter lists it only when the node starts with it, so it shows after the bridge has been restarted twice (the log says when).
+
 ## Supported robots
 
 Roborock robots that use the standard "1.0" protocol: S-series (S5 – S8 family), Q-series, Q Revo, Saros and similar. The 2025 Q7 series (B01 protocol) is not supported yet.

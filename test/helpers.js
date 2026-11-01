@@ -262,7 +262,13 @@ function addFakeMatter(api) {
         },
       },
     },
-    deviceRequirements: { Thermostat: { ThermostatUserInterfaceConfigurationServer: class ThermostatUserInterfaceConfigurationServer {} } },
+    // matter.js: servers are behaviors (a class named Behavior at the root of each)
+    deviceRequirements: (() => {
+      class Behavior {}
+      class ClusterBehavior extends Behavior {}
+      class RvcCleanModeServer extends ClusterBehavior {}
+      return { RoboticVacuumCleaner: { RvcCleanModeServer } };
+    })(),
     accessories: new Map(), // what Homebridge holds: accessory.clusters is the state Home sees
     updates: [], // [{ cluster, attributes }] in the order they were taken
     lines: [], // Homebridge's own log

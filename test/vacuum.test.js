@@ -309,6 +309,7 @@ test("child lock on the robot vacuum: off by default; put on the vacuum's node, 
   const v = await t.published();
   assert.equal(v.deviceType.servers.length, 1, "the vacuum carries the link to its node");
   assert.equal(v.deviceType.servers[0].id, "roborockChildLock");
+  assert.equal(v.deviceType.servers[0].early, true, "started with the endpoint (matter.js starts a behavior with no cluster only on demand otherwise)");
   // The vacuum's Matter node, as matter.js has it (the attribute listed: second start of the bridge).
   const listeners = [];
   const node = {

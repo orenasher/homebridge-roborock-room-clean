@@ -2,6 +2,10 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.15.1
+
+- the child lock on the robot vacuum now really starts: its link to the vacuum's Matter node is started with the vacuum (matter.js left it waiting); a warning is written if it ever does not start
+
 ## 1.15.0
 
 - `vacuumChildLock`: the child lock on the robot vacuum in Apple Home (Locked / Unlocked), through the "local config disabled" attribute of the vacuum's Matter node, as robot vacuums with their own Matter have it; kept in step with the child lock switch and the Roborock app; off by default. Shows after the bridge has been restarted twice.

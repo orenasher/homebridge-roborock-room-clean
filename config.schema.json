@@ -547,6 +547,66 @@
         "default": false,
         "description": "Shows the child lock on the robot vacuum in Apple Home (Locked / Unlocked), kept in step with the child lock switch. Needs the robot vacuum turned on. It shows in Apple Home after the bridge has been restarted twice (once to prepare it, once to show it)."
       },
+      "spotClean": {
+        "title": "Add a spot clean fan for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A fan that cleans around where the robot stands (about 1.5 x 1.5 m), for a spill. Its slider sets the suction. Off stops it and sends the robot to the dock."
+      },
+      "spotName": {
+        "title": "Spot clean fan name",
+        "type": "string",
+        "placeholder": "S8 Spot Clean",
+        "description": "Default: the robot's name + \"Spot Clean\"."
+      },
+      "maintenance": {
+        "title": "Show the wear of the brushes, filter and sensors",
+        "type": "boolean",
+        "default": false,
+        "description": "The life left of the main brush, side brush, filter and sensors, with a reset after a replacement (shown on the spot clean fan's details when it is on), and a contact sensor that opens when one of them is due, for a notification. Read every hour and after each clean."
+      },
+      "maintenanceName": {
+        "title": "Maintenance sensor name",
+        "type": "string",
+        "placeholder": "S8 Maintenance",
+        "description": "Default: the robot's name + \"Maintenance\"."
+      },
+      "errorSensor": {
+        "title": "Add an error sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor that opens while the robot is stuck or has an error (trapped, brush jammed, dustbin missing...), for a notification or an automation. The error is written in the log."
+      },
+      "errorName": {
+        "title": "Error sensor name",
+        "type": "string",
+        "placeholder": "S8 Error",
+        "description": "Default: the robot's name + \"Error\"."
+      },
+      "dndSwitch": {
+        "title": "Add a Do Not Disturb switch for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "Turns the robot's Do Not Disturb hours on and off (the hours set in the Roborock app; 22:00-08:00 when none were set). A change in the Roborock app shows up within 10 minutes."
+      },
+      "dndName": {
+        "title": "Do Not Disturb switch name",
+        "type": "string",
+        "placeholder": "S8 Do Not Disturb",
+        "description": "Default: the robot's name + \"Do Not Disturb\"."
+      },
+      "volumeSlider": {
+        "title": "Add a volume slider for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "The volume of the robot's voice, as a light's brightness. Off is silent; on again brings back the volume before."
+      },
+      "volumeName": {
+        "title": "Volume slider name",
+        "type": "string",
+        "placeholder": "S8 Volume",
+        "description": "Default: the robot's name + \"Volume\"."
+      },
       "statusInterval": {
         "title": "Check the robot's status every (seconds)",
         "type": "integer",
@@ -603,6 +663,23 @@
         "childLockSwitchName",
         "vacuumChildLock",
         "statusInterval"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "More for each robot",
+      "expandable": true,
+      "items": [
+        "spotClean",
+        "spotName",
+        "maintenance",
+        "maintenanceName",
+        "errorSensor",
+        "errorName",
+        "dndSwitch",
+        "dndName",
+        "volumeSlider",
+        "volumeName"
       ]
     },
     {

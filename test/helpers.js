@@ -94,6 +94,14 @@ function startFakeBroker(robotLog, robot = {}) {
           // The child lock (S7/S8): {lock_status: 0|1}, set with the same object.
           if (req.method === "set_child_lock_status" && req.params) robot.childLock = req.params.lock_status === 1;
           if (req.method === "get_child_lock_status") result = { lock_status: robot.childLock ? 1 : 0 };
+          // Consumables (seconds worked), Do Not Disturb, volume.
+          if (req.method === "get_consumable") result = [robot.wear || { main_brush_work_time: 0, side_brush_work_time: 0, filter_work_time: 0, sensor_dirty_time: 0 }];
+          if (req.method === "reset_consumable" && robot.wear) robot.wear = { ...robot.wear, [req.params[0]]: 0 };
+          if (req.method === "get_dnd_timer") result = [robot.dnd || { start_hour: 22, start_minute: 0, end_hour: 8, end_minute: 0, enabled: 0 }];
+          if (req.method === "set_dnd_timer") robot.dnd = { start_hour: req.params[0], start_minute: req.params[1], end_hour: req.params[2], end_minute: req.params[3], enabled: 1 };
+          if (req.method === "close_dnd_timer") robot.dnd = { ...(robot.dnd || { start_hour: 22, start_minute: 0, end_hour: 8, end_minute: 0 }), enabled: 0 };
+          if (req.method === "get_sound_volume") result = [robot.volume ?? 70];
+          if (req.method === "change_sound_volume") robot.volume = req.params[0];
           if (req.method === "get_status") result = [robot.status || { state: 8, in_cleaning: 0, fan_power: 101, water_box_mode: 202, battery: 87 }];
           const ts = Math.floor(Date.now() / 1000);
           const outTopic = topic.replace("rr/m/i/", "rr/m/o/");
@@ -146,7 +154,8 @@ function fakeHomebridge(storage) {
     BatteryLevel: "BatteryLevel",
     ChargingState: { NOT_CHARGING: 0, CHARGING: 1 },
     StatusLowBattery: { BATTERY_LEVEL_NORMAL: 0, BATTERY_LEVEL_LOW: 1 },
-    Active: "Active", RotationSpeed: "RotationSpeed", On: "On", Name: "Name", ConfiguredName: "ConfiguredName", Manufacturer: "M", Model: "Mo", SerialNumber: "S", FirmwareRevision: "F" };
+    Active: "Active", RotationSpeed: "RotationSpeed", On: "On", Brightness: "Brightness",
+    FilterLifeLevel: "FilterLifeLevel", FilterChangeIndication: "FilterChangeIndication", ResetFilterIndication: "ResetFilterIndication", Name: "Name", ConfiguredName: "ConfiguredName", Manufacturer: "M", Model: "Mo", SerialNumber: "S", FirmwareRevision: "F" };
   class Service {
     constructor(name) { this.displayName = name; this.chars = new Map(); }
     getCharacteristic(c) { if (!this.chars.has(c)) this.chars.set(c, new Characteristic(c)); return this.chars.get(c); }
@@ -154,13 +163,15 @@ function fakeHomebridge(storage) {
     updateCharacteristic(c, v) { this.getCharacteristic(c).value = v; return this; }
     testCharacteristic(c) { return this.chars.has(c); }
     addOptionalCharacteristic() {}
+    addLinkedService(s) { (this.linked = this.linked || []).push(s); }
   }
-  const S = { Switch: "Switch", Fanv2: "Fanv2", ContactSensor: "ContactSensor", Battery: "Battery", AccessoryInformation: "Info" };
+  const S = { Switch: "Switch", Fanv2: "Fanv2", ContactSensor: "ContactSensor", Battery: "Battery", AccessoryInformation: "Info", FilterMaintenance: "FilterMaintenance", Lightbulb: "Lightbulb" };
   class PlatformAccessory {
     constructor(name, uuid, category) { this.displayName = name; this.UUID = uuid; this.category = category; this.context = {}; this.services = new Map([["Info", new Service("Info")]]); }
     configureController(controller) { this.controller = controller; }
     getService(t) { return this.services.get(t); }
-    addService(t, name) { const s = new Service(name); s.type = t; this.services.set(t, s); return s; }
+    getServiceById(t, sub) { return this.services.get(`${t}:${sub}`); }
+    addService(t, name, sub) { const s = new Service(name); s.type = t; s.subtype = sub; this.services.set(sub ? `${t}:${sub}` : t, s); return s; }
     removeService(svc) { for (const [k, v] of this.services) if (v === svc) this.services.delete(k); }
   }
   const api = new EventEmitter();

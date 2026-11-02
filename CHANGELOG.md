@@ -2,6 +2,16 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.16.0
+
+More for each robot, each off until turned on in the settings:
+
+- spot clean fan (`spotClean`): cleans around the robot, the slider sets the suction
+- maintenance (`maintenance`): life left of the main brush, side brush, filter and sensors, with reset, and a sensor that opens when one is due
+- error sensor (`errorSensor`): opens while the robot is stuck or in error; the error is written in the log
+- Do Not Disturb switch (`dndSwitch`)
+- volume slider (`volumeSlider`)
+
 ## 1.15.1
 
 - the child lock on the robot vacuum now really starts: its link to the vacuum's Matter node is started with the vacuum (matter.js left it waiting); a warning is written if it ever does not start

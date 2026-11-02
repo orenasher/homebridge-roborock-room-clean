@@ -47,6 +47,18 @@ A clean from start to end: cleaning opens; at the end cleaning closes and return
 
 **Child lock on the robot vacuum.** `vacuumChildLock: true` (with the robot vacuum turned on) also shows the child lock on the robot vacuum in Apple Home, as Locked / Unlocked, kept in step with the child lock switch and the Roborock app. Apple Home shows it from the "local config disabled" attribute of the vacuum's Matter node, which Homebridge does not offer; the plugin adds it. Matter lists it only when the node starts with it, so it shows after the bridge has been restarted twice (the log says when).
 
+### More for each robot
+
+Each is off until turned on in the settings ("More for each robot"):
+
+- **Spot clean** (`spotClean`): a fan that cleans around where the robot stands (about 1.5 × 1.5 m). Its slider sets the suction; off stops it and sends the robot to the dock.
+- **Maintenance** (`maintenance`): the life left of the main brush, side brush, filter and sensors (as in the Roborock app), with a reset after a replacement, shown on the spot clean fan's details; and a contact sensor that opens when one of them is due, for a notification. Read every hour and after each clean.
+- **Error sensor** (`errorSensor`): a contact sensor that opens while the robot is stuck or has an error; what the error is goes in the log.
+- **Do Not Disturb** (`dndSwitch`): a switch for the robot's quiet hours (those set in the Roborock app, 22:00-08:00 when none were).
+- **Volume** (`volumeSlider`): the robot's voice volume as a light's brightness; off is silent.
+
+Each can be renamed (`spotName`, `maintenanceName`, `errorName`, `dndName`, `volumeName`).
+
 ## Supported robots
 
 Roborock robots that use the standard "1.0" protocol: S-series (S5 – S8 family), Q-series, Q Revo, Saros and similar. The 2025 Q7 series (B01 protocol) is not supported yet.
@@ -241,6 +253,19 @@ Protocol details based on [python-roborock](https://github.com/Python-roborock/p
 **שואב רובוטי (Matter)**: בהגדרות התוסף אפשר להוסיף את הרובוט עצמו ל"בית" כשואב רובוטי, עם האייקון של השואב: הפעלה, השהיה, שליחה לעמדת הטעינה, בחירת חדרים, שאיבה או שטיפה ועוצמת השאיבה, וסוללה. נדרש Homebridge 2 עם Matter מופעל בגשר של התוסף (Child Bridge Config > Enable Matter). את השואב מצמדים פעם אחת עם ה-Manual Code שמופיע בלוג של Homebridge. עצירה מהשואב עוצרת את הרובוט במקומו, ו"שלח לעמדת הטעינה" מחזיר אותו לעמדה.
 
 **מצלמת מפה**: בהגדרות התוסף אפשר להוסיף ל"בית" מצלמה שמציגה את המפה של הרובוט: החדרים בצבעים עם השמות שלהם, המסלול שהרובוט עבר, איפה הוא נמצא ושורת מצב. בוחרים סגנון צבעים מתוך שמונה, ואפשר לקבוע צבעים משלך וצבע לכל חדר. התוסף מצייר את המפה בעצמו, בלי תוסף או סקריפט נוסף. את המצלמה מוסיפים ל"בית" פעם אחת: הוסף אביזר > אפשרויות נוספות, בוחרים את המצלמה ומזינים את קוד ההתקנה של הגשר של התוסף.
+
+**נעילת ילדים על השואב**: בהגדרה "נעילת ילדים על השואב" מופיעה בשואב ב"בית" נעילת ילדים (נעול / הנעילה בוטלה), מסונכרנת עם מתג נעילת המקשים ועם אפליקציית Roborock.
+1. מדליקים בהגדרות התוסף את "נעילת ילדים על השואב" ושומרים.
+2. מפעילים מחדש את הגשר של התוסף. בלוג מופיע: `the child lock is ready ... after the next restart`.
+3. מפעילים מחדש את הגשר פעם שנייה. בלוג מופיע: `the child lock is on the robot vacuum in Apple Home`.
+4. פותחים את השואב ב"בית". אם הנעילה לא מופיעה, מנתקים את ה-HomePod מהחשמל ל-10 שניות.
+
+**עוד לכל רובוט** (כל אחד כבוי עד שמדליקים אותו בהגדרות, בחלק "עוד לכל רובוט"):
+- **ניקוי נקודתי**: מאוורר שמנקה סביב המקום שבו הרובוט עומד (בערך 1.5 על 1.5 מטר). המחוון קובע את עוצמת השאיבה; כיבוי עוצר ושולח את הרובוט לעמדה.
+- **תחזוקה**: כמה נשאר עד החלפה של המברשת הראשית, מברשת הצד, הפילטר והחיישנים, עם איפוס אחרי החלפה (בפרטי מאוורר הניקוי הנקודתי), וחיישן מגע שנפתח כשמשהו צריך החלפה - כדי לקבל התראה. כדי לקבל התראה: בבית > החיישן > הגדרות > התראות > מדליקים.
+- **חיישן תקלה**: חיישן מגע שנפתח כשהרובוט תקוע או בתקלה. סוג התקלה נכתב בלוג.
+- **נא לא להפריע**: מתג שמדליק ומכבה את שעות השקט של הרובוט (השעות מאפליקציית Roborock).
+- **עוצמת שמע**: עוצמת הקול של הרובוט כבהירות של מנורה; כיבוי משתיק.
 
 כדי לעבור לעברית: פתח את הגדרות התוסף ב-Homebridge ובחר **עברית** בתיבה **Language / שפה** שבראש העמוד, לחץ על שמירה והפעל מחדש את Homebridge.
 

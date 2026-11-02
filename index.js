@@ -9,6 +9,7 @@ const { MapView } = require("./lib/mapview");
 const { PictureCamera } = require("./lib/camera");
 const { Painter } = require("./lib/painter");
 const { MatterVacuum } = require("./lib/vacuum");
+const { RobotExtras } = require("./lib/extras");
 
 const PLUGIN_NAME = "homebridge-roborock-room-clean";
 const PLATFORM_NAME = "RoborockRoomClean";
@@ -88,6 +89,10 @@ class RoborockRoomCleanPlatform {
     this.cameras = [];
     this.painter = null;
     this.vacuums = new Map(); // duid -> MatterVacuum (the robot as a robot vacuum in Apple Home)
+    this.extras = new Map(); // duid -> RobotExtras (maintenance, error sensor, Do Not Disturb, volume, spot clean)
+    this.pluginName = PLUGIN_NAME;
+    this.platformName = PLATFORM_NAME;
+    this.suctionCodes = SUCTION;
     this.saidNoMatter = false;
     this.storageDir = path.join(api.user.storagePath(), STORAGE_DIR);
     this.session = null;
@@ -112,6 +117,7 @@ class RoborockRoomCleanPlatform {
       for (const vacuum of this.vacuums.values()) vacuum.close();
       for (const view of this.views.values()) view.close();
       for (const lock of this.childLocks.values()) clearTimeout(lock.timer);
+      for (const extras of this.extras.values()) extras.stop();
       for (const timer of this.roomTimers.values()) clearInterval(timer);
       if (this.painter) this.painter.close(true);
       if (this.session) this.session.stop();
@@ -251,6 +257,9 @@ class RoborockRoomCleanPlatform {
       if (this.config.childLockSwitch === true) {
         wanted.add(this.setupChildLock(robot, channel, robots.length > 1));
       }
+      const extras = new RobotExtras(this, robot, channel, robots.length > 1);
+      for (const uuid of extras.setup()) wanted.add(uuid);
+      this.extras.set(robot.duid, extras);
       for (const def of this.buildPrograms(robot, segments, robots.length > 1)) {
         wanted.add(def.uuid);
         this.setupAccessory(def, channel);
@@ -936,6 +945,8 @@ class RoborockRoomCleanPlatform {
     }
     this.updateChargingSensor(duid, status);
     this.updateStateSensors(duid, status);
+    const extras = this.extras.get(duid);
+    if (extras) extras.statusChanged(status);
     // Not cleaning (on the dock, on the way, stopped): where the robot was is no longer where it cleans.
     if (typeof status.state === "number" && !CLEANING_STATES.has(status.state)) this.roomsNow.delete(duid);
     for (const program of this.programs.values()) {

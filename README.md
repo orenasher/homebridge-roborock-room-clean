@@ -1,3 +1,5 @@
+<p align="center"><img src="icon-512.png" width="120" alt=""></p>
+
 <p align="center"><img src="https://raw.githubusercontent.com/orenasher/homebridge-roborock-room-clean/main/branding/icon.png" alt="Roborock Room Clean" width="160"></p>
 
 # Roborock Room Clean

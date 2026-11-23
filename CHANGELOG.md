@@ -2,6 +2,11 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.16.1
+
+- New versions are published to npm straight from GitHub (verified, with provenance). Nothing changes in the plugin itself.
+- גרסאות חדשות מתפרסמות ל‑npm ישירות מ‑GitHub (מאומת, עם מקור מוצהר). בפלאגין עצמו לא השתנה כלום.
+
 ## 1.16.0
 
 More for each robot, each off until turned on in the settings:

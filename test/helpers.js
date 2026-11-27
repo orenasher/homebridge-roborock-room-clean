@@ -101,6 +101,8 @@ function startFakeBroker(robotLog, robot = {}) {
           if (req.method === "set_dnd_timer") robot.dnd = { start_hour: req.params[0], start_minute: req.params[1], end_hour: req.params[2], end_minute: req.params[3], enabled: 1 };
           if (req.method === "close_dnd_timer") robot.dnd = { ...(robot.dnd || { start_hour: 22, start_minute: 0, end_hour: 8, end_minute: 0 }), enabled: 0 };
           if (req.method === "get_sound_volume") result = [robot.volume ?? 70];
+          if (req.method === "get_clean_summary") result = robot.records ? { clean_time: 0, clean_area: 0, clean_count: robot.records.length, records: robot.records.map((r, i) => 1000 + robot.records.length - i) } : [];
+          if (req.method === "get_clean_record" && robot.records) result = [robot.records[req.params[0] - 1001]];
           if (req.method === "change_sound_volume") robot.volume = req.params[0];
           if (req.method === "get_status") result = [robot.status || { state: 8, in_cleaning: 0, fan_power: 101, water_box_mode: 202, battery: 87 }];
           const ts = Math.floor(Date.now() / 1000);

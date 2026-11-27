@@ -2,6 +2,24 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.17.0
+
+Three new sensors for each robot, each off until turned on in the settings ("More for each robot"):
+
+- **Robot stuck** (`stuckSensor`): opens only while the robot is stuck where it is (trapped, wheels lifted or jammed, brush jammed, bumper stuck, tilted)
+- **Dock not found** (`dockSensor`): opens only while the robot cannot find or reach its dock
+- **Clean not finished** (`incompleteSensor`): opens when a clean ends before it was finished, for example a room the robot could not reach; closes when the next clean starts. A clean you stopped yourself does not open it
+
+Turn on the sensor's notifications in Apple Home to get an alert on your phone.
+
+שלושה חיישנים חדשים לכל רובוט, כל אחד כבוי עד שמפעילים אותו בהגדרות ("עוד לכל רובוט"):
+
+- **השואב תקוע** (`stuckSensor`): נפתח רק כשהשואב תקוע במקום (לכוד, גלגלים מורמים או תקועים, מברשת תקועה, פגוש תקוע, מוטה)
+- **לא מוצא עגינה** (`dockSensor`): נפתח רק כשהשואב לא מוצא את עמדת הטעינה או לא מצליח להגיע אליה
+- **ניקוי לא הושלם** (`incompleteSensor`): נפתח כשניקוי הסתיים לפני שהושלם, למשל חדר שהשואב לא הצליח להגיע אליו; נסגר כשהניקוי הבא מתחיל. ניקוי שעצרת בעצמך לא פותח אותו
+
+כדי לקבל התראה בטלפון, מפעילים את ההתראות של החיישן באפליקציית הבית.
+
 ## 1.16.1
 
 - New versions are published to npm straight from GitHub (verified, with provenance). Nothing changes in the plugin itself.

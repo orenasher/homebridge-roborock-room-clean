@@ -42,7 +42,7 @@ const DOCKED = { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, 
 
 test("extras are off by default", async () => {
   const t = await startPlatform({}, { status: DOCKED });
-  for (const name of ["S8 Spot Clean", "S8 Maintenance", "S8 Error", "S8 Do Not Disturb", "S8 Volume"]) assert.ok(!t.named(name), name);
+  for (const name of ["S8 Spot Clean", "S8 Maintenance", "S8 Error", "S8 Do Not Disturb", "S8 Volume", "S8 Stuck", "S8 Dock Not Found", "S8 Clean Not Finished"]) assert.ok(!t.named(name), name);
   t.stop();
 });
 
@@ -103,6 +103,58 @@ test("error sensor: opens while the robot is in error, says what the error is, c
   extras.statusChanged({ ...DOCKED, state: 5, error_code: 0 });
   assert.equal(s.getCharacteristic(t.api.hap.Characteristic.ContactSensorState).value, 0);
   t.stop();
+});
+
+test("stuck and dock sensors: each opens only for its own errors", async () => {
+  const t = await startPlatform({ stuckSensor: true, dockSensor: true, language: "he" }, { status: DOCKED });
+  const C = t.api.hap.Characteristic.ContactSensorState;
+  const stuck = t.named("S8 תקוע").getService("ContactSensor");
+  const dock = t.named("S8 לא מוצא עגינה").getService("ContactSensor");
+  const extras = t.platform.extras.get(DUID);
+  extras.statusChanged({ ...DOCKED, state: 12, error_code: 8 }); // trapped
+  assert.equal(stuck.getCharacteristic(C).value, 1);
+  assert.equal(dock.getCharacteristic(C).value, 0);
+  extras.statusChanged({ ...DOCKED, state: 12, error_code: 23 }); // could not return to the dock
+  assert.equal(stuck.getCharacteristic(C).value, 0);
+  assert.equal(dock.getCharacteristic(C).value, 1);
+  extras.statusChanged({ ...DOCKED, state: 12, error_code: 9 }); // dustbin missing: neither
+  assert.equal(stuck.getCharacteristic(C).value, 0);
+  assert.equal(dock.getCharacteristic(C).value, 0);
+  extras.statusChanged({ ...DOCKED, state: 5, error_code: 0 });
+  assert.equal(dock.getCharacteristic(C).value, 0);
+  assert.ok(t.logs.some((l) => /S8 תקוע: open: robot trapped/.test(l)), t.logs.join("\n"));
+  t.stop();
+});
+
+test("clean not finished: opens when the robot's record says the clean was not finished, closes on the next clean", async () => {
+  const robot = { status: DOCKED, records: [] };
+  const t = await startPlatform({ incompleteSensor: true }, robot);
+  const C = t.api.hap.Characteristic.ContactSensorState;
+  const s = t.named("S8 Clean Not Finished").getService("ContactSensor");
+  const extras = t.platform.extras.get(DUID);
+  extras.recordWait = [20, 20];
+  const now = () => Math.floor(Date.now() / 1000);
+  const run = async (states, record) => {
+    for (const st of states) extras.statusChanged({ ...DOCKED, ...st });
+    robot.records.push({ begin: now() - 600, end: now() + 1, duration: 600, area: 20e6, error: 0, complete: record.complete, finish_reason: record.reason });
+    await wait(300);
+  };
+  try {
+  // Could not reach a room: straight home on its own, record not complete.
+  await run([{ state: 18, in_cleaning: 2 }, { state: 6, in_cleaning: 2 }, { state: 8, in_cleaning: 0 }], { complete: 0, reason: 45 });
+  assert.equal(s.getCharacteristic(C).value, 1, t.logs.join("\n"));
+  // The next clean closes it; this one finishes.
+  await run([{ state: 18, in_cleaning: 2 }], { complete: 1, reason: 56 });
+  assert.equal(s.getCharacteristic(C).value, 0);
+  await run([{ state: 6, in_cleaning: 0 }, { state: 8, in_cleaning: 0 }], { complete: 1, reason: 56 });
+  assert.equal(s.getCharacteristic(C).value, 0);
+  // Stopped by hand and sent home: not an alert.
+  await run([{ state: 18, in_cleaning: 2 }, { state: 10, in_cleaning: 2 }, { state: 6, in_cleaning: 0 }, { state: 8, in_cleaning: 0 }], { complete: 0, reason: 21 });
+  assert.equal(s.getCharacteristic(C).value, 0);
+  assert.ok(t.logs.some((l) => /ended before it was finished .*finish reason 45/.test(l)), t.logs.join("\n"));
+  } finally {
+    t.stop();
+  }
 });
 
 test("Do Not Disturb: on sets the robot's hours, off closes them; read from the robot", async () => {

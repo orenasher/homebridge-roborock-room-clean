@@ -56,10 +56,15 @@ Each is off until turned on in the settings ("More for each robot"):
 - **Spot clean** (`spotClean`): a fan that cleans around where the robot stands (about 1.5 × 1.5 m). Its slider sets the suction; off stops it and sends the robot to the dock.
 - **Maintenance** (`maintenance`): the life left of the main brush, side brush, filter and sensors (as in the Roborock app), with a reset after a replacement, shown on the spot clean fan's details; and a contact sensor that opens when one of them is due, for a notification. Read every hour and after each clean.
 - **Error sensor** (`errorSensor`): a contact sensor that opens while the robot is stuck or has an error; what the error is goes in the log.
+- **Robot stuck** (`stuckSensor`): a contact sensor that opens only while the robot is stuck where it is (trapped, wheels lifted or jammed, brush jammed, bumper stuck, tilted).
+- **Dock not found** (`dockSensor`): a contact sensor that opens only while the robot cannot find or reach its dock.
+- **Clean not finished** (`incompleteSensor`): a contact sensor that opens when a clean ends before it was finished, for example when the robot could not reach a room, as the robot's own clean record says. It closes when the next clean starts; a clean you stopped yourself does not open it. The log says how each clean ended.
 - **Do Not Disturb** (`dndSwitch`): a switch for the robot's quiet hours (those set in the Roborock app, 22:00-08:00 when none were).
 - **Volume** (`volumeSlider`): the robot's voice volume as a light's brightness; off is silent.
 
-Each can be renamed (`spotName`, `maintenanceName`, `errorName`, `dndName`, `volumeName`).
+Each can be renamed (`spotName`, `maintenanceName`, `errorName`, `stuckName`, `dockName`, `incompleteName`, `dndName`, `volumeName`).
+
+For a notification on your phone: in Apple Home open the sensor's settings and turn on its notifications.
 
 ## Supported robots
 

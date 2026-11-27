@@ -583,6 +583,42 @@
         "placeholder": "S8 Error",
         "description": "Default: the robot's name + \"Error\"."
       },
+      "stuckSensor": {
+        "title": "Add a \"robot stuck\" sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor that opens only while the robot is stuck where it is (trapped, wheels lifted or jammed, brush jammed, bumper stuck, tilted...), for a notification."
+      },
+      "stuckName": {
+        "title": "Robot stuck sensor name",
+        "type": "string",
+        "placeholder": "S8 Stuck",
+        "description": "Default: the robot's name + \"Stuck\"."
+      },
+      "dockSensor": {
+        "title": "Add a \"dock not found\" sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor that opens only while the robot cannot find or reach its dock, for a notification."
+      },
+      "dockName": {
+        "title": "Dock not found sensor name",
+        "type": "string",
+        "placeholder": "S8 Dock Not Found",
+        "description": "Default: the robot's name + \"Dock Not Found\"."
+      },
+      "incompleteSensor": {
+        "title": "Add a \"clean not finished\" sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor that opens when a clean ends before it was finished (for example a room the robot could not reach), as the robot's own clean record says. It closes when the next clean starts. A clean you stopped yourself does not open it."
+      },
+      "incompleteName": {
+        "title": "Clean not finished sensor name",
+        "type": "string",
+        "placeholder": "S8 Clean Not Finished",
+        "description": "Default: the robot's name + \"Clean Not Finished\"."
+      },
       "dndSwitch": {
         "title": "Add a Do Not Disturb switch for each robot",
         "type": "boolean",
@@ -676,6 +712,12 @@
         "maintenanceName",
         "errorSensor",
         "errorName",
+        "stuckSensor",
+        "stuckName",
+        "dockSensor",
+        "dockName",
+        "incompleteSensor",
+        "incompleteName",
         "dndSwitch",
         "dndName",
         "volumeSlider",

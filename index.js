@@ -31,8 +31,8 @@ const STATE_NAMES = {
  * Names the user typed and names from the Roborock app are never translated.
  */
 const TEXT = {
-  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, cleaning: (robot) => `${robot} Cleaning`, returning: (robot) => `${robot} Returning`, stopped: (robot) => `${robot} Stopped`, childLock: (robot) => `${robot} Child Lock`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
-  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, cleaning: (robot) => `${robot} מנקה`, returning: (robot) => `${robot} חוזר לטעינה`, stopped: (robot) => `${robot} עצר`, childLock: (robot) => `נעילת מקשים ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
+  en: { fan: "Clean {room}", charging: (robot) => `${robot} Charging`, cleaning: (robot) => `${robot} Cleaning`, mopping: (robot) => `${robot} Mopping`, returning: (robot) => `${robot} Returning`, stopped: (robot) => `${robot} Stopped`, childLock: (robot) => `${robot} Child Lock`, battery: (name) => `${name} Battery`, room: (id) => `Room ${id}`, map: (robot) => `${robot} Map` },
+  he: { fan: "ניקוי {room}", charging: (robot) => `טעינת ${robot}`, cleaning: (robot) => `${robot} מנקה`, mopping: (robot) => `${robot} שוטף`, returning: (robot) => `${robot} חוזר לטעינה`, stopped: (robot) => `${robot} עצר`, childLock: (robot) => `נעילת מקשים ${robot}`, battery: (name) => `סוללת ${name}`, room: (id) => `חדר ${id}`, map: (robot) => `מפת ${robot}` },
 };
 
 /**
@@ -62,7 +62,7 @@ const CLOSE_WATCH_STEP_MS = 4000;
 /** States in which the robot is actively cleaning (not returning, charging or paused). */
 const CLEANING_STATES = new Set([5, 11, 17, 18]);
 // Optional contact sensors, each open in one situation (see setupStateSensor).
-const STATE_SENSORS = ["cleaning", "returning", "stopped"];
+const STATE_SENSORS = ["cleaning", "mopping", "returning", "stopped"];
 
 /** When the robot would not say which rooms it is cleaning, do not ask again for a while. */
 const NO_MAP_PAUSE_MS = 10 * 60 * 1000;
@@ -1232,6 +1232,11 @@ class RoborockRoomCleanPlatform {
       // Also emptying the bin or washing the mop in the middle of a clean.
       return CLEANING_STATES.has(state) || ([22, 23, 26].includes(state) && !!last.inCleaning);
     }
+    if (kind === "mopping") {
+      // Cleaning with the water on and the mop in place, or washing the mop in the middle of a clean.
+      if ([23, 26].includes(state)) return !!last.inCleaning && last.water !== WATER_OFF && last.mop !== 0;
+      return CLEANING_STATES.has(state) && typeof last.water === "number" && last.water !== WATER_OFF && last.mop !== 0;
+    }
     if (kind === "returning") return state === 6 || state === 15;
     if (kind === "stopped") return [2, 3, 10, 12].includes(state);
     return false;
@@ -1248,7 +1253,10 @@ class RoborockRoomCleanPlatform {
     for (const sensor of sensors) {
       const was = RoborockRoomCleanPlatform.inSituation(sensor.kind, sensor.last);
       const inCleaning = status.in_cleaning !== undefined ? Number(status.in_cleaning) : sensor.last ? sensor.last.inCleaning : 0;
-      sensor.last = { state: status.state, inCleaning };
+      const prev = sensor.last || {};
+      const water = typeof status.water_box_mode === "number" ? status.water_box_mode : prev.water;
+      const mop = typeof status.water_box_carriage_status === "number" ? status.water_box_carriage_status : prev.mop;
+      sensor.last = { state: status.state, inCleaning, water, mop };
       sensor.accessory.context.last = sensor.last;
       const now = RoborockRoomCleanPlatform.inSituation(sensor.kind, sensor.last);
       if (was !== now) this.log.info(`${sensor.accessory.context.name}: ${now ? "open" : "closed"} (state ${status.state}).`);

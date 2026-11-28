@@ -2,6 +2,14 @@
 
 Notable changes per version. Older versions (before 1.7.0) are in the git history.
 
+## 1.18.0
+
+- **New: mopping sensor** (`moppingSensor`): a contact sensor for each robot that is open while the robot is mopping (cleaning with the water on and the mop in place, also while it washes the mop in the middle of a clean) and closed otherwise. A vacuum-only clean opens only the cleaning sensor. Off until turned on in the settings, next to the cleaning sensor
+- Reminder: the **cleaning sensor** (`cleaningSensor`, "S8 Cleaning") shows when the robot is cleaning; turn it on in the same place
+
+- **חדש: חיישן שטיפה** (`moppingSensor`): חיישן מגע לכל רובוט, פתוח כשהרובוט שוטף (מנקה עם מים והמגב במקום, וגם כשהוא שוטף את המגב באמצע ניקוי) וסגור בכל מצב אחר. ניקוי בשאיבה בלבד פותח רק את חיישן הניקוי. כבוי עד שמפעילים אותו בהגדרות, ליד חיישן הניקוי
+- תזכורת: **חיישן הניקוי** (`cleaningSensor`, "S8 מנקה") מראה מתי הרובוט מנקה; מפעילים אותו באותו מקום
+
 ## 1.17.0
 
 Three new sensors for each robot, each off until turned on in the settings ("More for each robot"):

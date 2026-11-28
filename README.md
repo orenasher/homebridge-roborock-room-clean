@@ -35,15 +35,16 @@ Status changes show up quickly: the robot reports them itself through the cloud 
 
 For each robot the plugin also adds a **contact sensor**: **closed** while the robot is on the dock charging (or fully charged), **open** while it is off the dock. The same accessory shows the **battery level** (and a low-battery warning under 20%). Use it in automations, e.g. "when the vacuum leaves the dock". Set `chargingSensorName` to rename it, or `chargingSensor: false` to turn it off. Turn the sensor off if the battery on the fans is enough for you.
 
-Three more contact sensors can be turned on, each **open** in one situation only and **closed** otherwise. They are off by default. Apple Home cannot run automations on the Matter vacuum, but it can on these, and it can notify you when one opens (the sensor's settings > Status and Notifications).
+Four more contact sensors can be turned on, each **open** in one situation only and **closed** otherwise. They are off by default. Apple Home cannot run automations on the Matter vacuum, but it can on these, and it can notify you when one opens (the sensor's settings > Status and Notifications).
 
 | Setting | Open while the robot... |
 |---|---|
 | `cleaningSensor` | is cleaning (also while it washes the mop or empties the bin in the middle of a clean) |
+| `moppingSensor` | is mopping: cleaning with the water on and the mop in place (also while it washes the mop in the middle of a clean). A vacuum-only clean opens only `cleaningSensor` |
 | `returningSensor` | is on its way back to the dock (once it is there, the charging sensor closes) |
 | `stoppedSensor` | stands off the dock without cleaning: paused, stopped, stuck or in error |
 
-A clean from start to end: cleaning opens; at the end cleaning closes and returning opens; on the dock returning closes and the charging sensor closes. Rename them with `cleaningSensorName`, `returningSensorName` and `stoppedSensorName`.
+A clean from start to end: cleaning opens; at the end cleaning closes and returning opens; on the dock returning closes and the charging sensor closes. Rename them with `cleaningSensorName`, `moppingSensorName`, `returningSensorName` and `stoppedSensorName`.
 
 **Child lock.** `childLockSwitch: true` adds a switch for the robot's child lock: on locks the buttons on the robot, off unlocks them. A change made in the Roborock app shows up within 10 minutes. Rename it with `childLockSwitchName`.
 

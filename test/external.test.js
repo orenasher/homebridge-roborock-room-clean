@@ -837,6 +837,32 @@ test("state sensors: cleaning, returning and stopped are each open only in their
   assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
 });
 
+test("mopping sensor: open only while the robot cleans with the water on and the mop in place", async () => {
+  const robot = { status: { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, battery: 90 } };
+  const run = await startPlatform({ language: "he", cleaningSensor: true, moppingSensor: true }, robot);
+  assert.ok(run.api.registered.some((a) => a.displayName === "S8 שוטף"), run.api.registered.map((a) => a.displayName).join(", "));
+  const C = run.api.hap.Characteristic.ContactSensorState;
+  const sensors = Object.fromEntries(run.platform.stateSensors.get(DUID).map((s) => [s.kind, s]));
+  const open = () => Object.entries(sensors).filter(([, s]) => s.contact.getCharacteristic(C).value === C.CONTACT_NOT_DETECTED).map(([k]) => k).sort();
+  const say = (st) => run.platform.updateStateSensors(DUID, { battery: 80, ...st });
+
+  say({ state: 18, in_cleaning: 3, water_box_mode: 200 });
+  assert.deepEqual(open(), ["cleaning"], "vacuum only");
+  say({ state: 18, in_cleaning: 3, water_box_mode: 202, water_box_carriage_status: 1 });
+  assert.deepEqual(open(), ["cleaning", "mopping"], "vacuum and mop");
+  say({ state: 23, in_cleaning: 3 });
+  assert.deepEqual(open(), ["cleaning", "mopping"], "washing the mop in the middle of a clean");
+  say({ state: 18, in_cleaning: 3, water_box_carriage_status: 0 });
+  assert.deepEqual(open(), ["cleaning"], "no mop in place");
+  say({ state: 10, in_cleaning: 3, water_box_carriage_status: 1 });
+  assert.deepEqual(open(), [], "paused");
+  say({ state: 8, in_cleaning: 0 });
+  assert.deepEqual(open(), []);
+  assert.ok(run.logs.some((l) => l === "S8 שוטף: open (state 18)."), run.logs.join("\n"));
+  run.stop();
+  assert.ok(!run.logs.some((l) => l.startsWith("ERR")), run.logs.join("\n"));
+});
+
 test("child lock switch: shows what the robot says, locks and unlocks it; off by default", async () => {
   const robot = { status: { state: 8, in_cleaning: 0, fan_power: 102, water_box_mode: 200, battery: 90 }, childLock: true };
   let run = await startPlatform({}, robot);

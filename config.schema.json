@@ -505,6 +505,18 @@
         "placeholder": "S8 Cleaning",
         "description": "Default: the robot's name + \"Cleaning\", e.g. \"S8 Cleaning\". You can write e.g. \"השואב מנקה\"."
       },
+      "moppingSensor": {
+        "title": "Add a mopping sensor for each robot",
+        "type": "boolean",
+        "default": false,
+        "description": "A contact sensor: open while the robot is mopping (cleaning with the water on and the mop in place, also while it washes the mop in the middle of a clean), closed otherwise. A vacuum-only clean opens only the cleaning sensor."
+      },
+      "moppingSensorName": {
+        "title": "Mopping sensor name",
+        "type": "string",
+        "placeholder": "S8 Mopping",
+        "description": "Default: the robot's name + \"Mopping\", e.g. \"S8 Mopping\". You can write e.g. \"השואב שוטף\"."
+      },
       "returningSensor": {
         "title": "Add a returning sensor for each robot",
         "type": "boolean",
@@ -691,6 +703,8 @@
         "chargingSensorName",
         "cleaningSensor",
         "cleaningSensorName",
+        "moppingSensor",
+        "moppingSensorName",
         "returningSensor",
         "returningSensorName",
         "stoppedSensor",
